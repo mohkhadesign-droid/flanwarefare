@@ -26,6 +26,22 @@ public class PermissionRegistry {
     public static ClaimPermission FLIGHT;
     public static ClaimPermission NOHUNGER;
     public static ClaimPermission LOCKITEMS;
+    public static ClaimPermission REDSTONE;
+    public static ClaimPermission TARGETBLOCK;
+    public static ClaimPermission ANVIL;
+    public static ClaimPermission ENCHANTMENTTABLE;
+    public static ClaimPermission BEACON;
+    public static ClaimPermission NOTEBLOCK;
+    public static ClaimPermission JUKEBOX;
+    public static ClaimPermission PROJECTILES;
+    public static ClaimPermission ENDERPEARL;
+    public static ClaimPermission CHORUSFRUIT;
+    public static ClaimPermission TRAMPLE;
+    public static ClaimPermission HURTANIMAL;
+    public static ClaimPermission BREAKNONLIVING;
+    public static ClaimPermission ARMORSTAND;
+    public static ClaimPermission ITEMFRAMEROTATE;
+    public static ClaimPermission HURTPLAYER;
 
     public static ClaimPermission get(String id) {
         throw new UnsupportedOperationException("stub");

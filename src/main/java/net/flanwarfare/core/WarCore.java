@@ -3,10 +3,14 @@ package net.flanwarfare.core;
 import io.github.flemmli97.flan.claim.Claim;
 import io.github.flemmli97.flan.config.ConfigHandler;
 import net.flanwarfare.FlanWarfare;
+import net.flanwarfare.alerts.ClaimWarState;
+import net.flanwarfare.alerts.RaidAlerts;
+import net.flanwarfare.capture.CaptureAura;
 import net.flanwarfare.capture.CaptureManager;
 import net.flanwarfare.claims.ClaimLifecycle;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.conquest.ConquestService;
+import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.WarData;
 import net.flanwarfare.flag.FlagService;
 import net.flanwarfare.flan.FlanBridge;
@@ -40,6 +44,8 @@ public final class WarCore {
     private final CaptureManager capture;
     private final ConquestService conquest;
     private final SideResolver sides;
+    private final RaidAlerts alerts;
+    private final CaptureAura aura;
     private volatile boolean ready;
     private long ticks;
     private long lastSaveTick;
@@ -54,6 +60,8 @@ public final class WarCore {
         this.flags = new FlagService(this);
         this.capture = new CaptureManager(this);
         this.conquest = new ConquestService(this);
+        this.alerts = new RaidAlerts(this);
+        this.aura = new CaptureAura(this);
     }
 
     /** The current core, possibly in safe mode. */
@@ -119,6 +127,7 @@ public final class WarCore {
         lifecycle.tick(ticks);
         flags.tick(ticks);
         capture.tick(ticks);
+        aura.tick(ticks);
         if (data.isDirty() && ticks - lastSaveTick >= 200) {
             saveNow();
         }
@@ -200,5 +209,18 @@ public final class WarCore {
 
     public SideResolver sides() {
         return sides;
+    }
+
+    public RaidAlerts alerts() {
+        return alerts;
+    }
+
+    public CaptureAura aura() {
+        return aura;
+    }
+
+    /** Live state of a claim (see {@link ClaimWarState}). */
+    public ClaimWarState warState(ClaimRecord record) {
+        return ClaimWarState.of(capture.statusOf(record.claimId), alerts.underAttack(record.claimId), record.conquered);
     }
 }

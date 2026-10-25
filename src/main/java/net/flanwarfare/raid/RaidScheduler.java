@@ -135,14 +135,40 @@ public final class RaidScheduler {
         if (WarConfig.ALLOW_CONTAINERS.get()) {
             set.add(PermissionRegistry.OPENCONTAINER);
         }
-        if (WarConfig.ALLOW_INTERACTIONS.get()) {
-            set.add(PermissionRegistry.INTERACTBLOCK);
+        if (WarConfig.ALLOW_DOORS.get()) {
             set.add(PermissionRegistry.DOOR);
             set.add(PermissionRegistry.TRAPDOOR);
             set.add(PermissionRegistry.FENCEGATE);
+        }
+        if (WarConfig.ALLOW_REDSTONE.get()) {
             set.add(PermissionRegistry.BUTTONLEVER);
             set.add(PermissionRegistry.PRESSUREPLATE);
+            set.add(PermissionRegistry.REDSTONE);
+            set.add(PermissionRegistry.TARGETBLOCK);
+        }
+        if (WarConfig.ALLOW_BLOCK_INTERACTIONS.get()) {
+            set.add(PermissionRegistry.INTERACTBLOCK);
+            set.add(PermissionRegistry.ANVIL);
+            set.add(PermissionRegistry.ENCHANTMENTTABLE);
+            set.add(PermissionRegistry.BEACON);
             set.add(PermissionRegistry.LECTERNTAKE);
+            set.add(PermissionRegistry.NOTEBLOCK);
+            set.add(PermissionRegistry.JUKEBOX);
+        }
+        if (WarConfig.ALLOW_PROJECTILES_AND_PEARLS.get()) {
+            set.add(PermissionRegistry.PROJECTILES);
+            set.add(PermissionRegistry.ENDERPEARL);
+            set.add(PermissionRegistry.CHORUSFRUIT);
+            set.add(PermissionRegistry.TRAMPLE);
+        }
+        if (WarConfig.ALLOW_ENTITY_DAMAGE.get()) {
+            set.add(PermissionRegistry.HURTANIMAL);
+            set.add(PermissionRegistry.BREAKNONLIVING);
+            set.add(PermissionRegistry.ARMORSTAND);
+            set.add(PermissionRegistry.ITEMFRAMEROTATE);
+        }
+        if (WarConfig.ALLOW_PVP.get()) {
+            set.add(PermissionRegistry.HURTPLAYER);
         }
         if (WarConfig.ALLOW_BUCKETS.get()) {
             set.add(PermissionRegistry.BUCKET);
@@ -160,6 +186,21 @@ public final class RaidScheduler {
         }
         set.remove(null);
         return set;
+    }
+
+    /**
+     * Whether using this permission counts as a hostile raid action for live alerts. Movement
+     * (pearls, chorus fruit, trampling, pressure plates), fighting and fake players do not:
+     * walking through a claim or a fight is not "your base is being raided".
+     */
+    public static boolean isHostileAction(ClaimPermission permission) {
+        return permission != PermissionRegistry.HURTPLAYER
+                && permission != PermissionRegistry.ENDERPEARL
+                && permission != PermissionRegistry.CHORUSFRUIT
+                && permission != PermissionRegistry.TRAMPLE
+                && permission != PermissionRegistry.PRESSUREPLATE
+                && permission != PermissionRegistry.PROJECTILES
+                && permission != PermissionRegistry.FAKEPLAYER;
     }
 
     private static ClaimPermission lookup(String id) {

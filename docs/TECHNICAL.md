@@ -8,7 +8,7 @@ Everything below was established by disassembling the installed
 | Question | Finding in Flan 1.7.2 | Consequence |
 |---|---|---|
 | Can raid access be granted dynamically? | `Claim.canInteract(player, perm, pos, msg)` posts `PermissionCheckEvent` **first**, before its admin-claim, owner and group checks. The default result is `PASS`; `SUCCESS` allows, `FAIL` denies. | All player permissions are decided in one Forge listener. No claim data is changed, so protection returns the moment a raid ends. The listener must skip admin claims itself, because the event fires before Flan's admin check. |
-| Do world effects reach the event? | No. Explosions, fire spread, pistons, fluids, mob spawns and lightning call `canInteract(null, perm, pos)`, which never posts the event. | One `@Inject` at the head of `Claim.canInteract`, active only for a null player and only when configured. Off by default. |
+| Do world effects reach the event? | No. Explosions, fire spread, pistons, fluids, mob spawns and lightning call `canInteract(null, perm, pos)`, which never posts the event. | One `@Inject` at the head of `Claim.canInteract`, active only for a null player, during raids, per configuration (explosions on by default per source, fire/pistons/fluids off). See section 9. |
 | Is `ClaimStorage.transferOwner` usable for conquest? | It returns `false` unless `player.getUniqueID()` equals the current owner. When it succeeds it moves the claim between owners in `playerClaimMap` and marks both owners' files dirty. | It is the right operation (it keeps Flan's index and saves consistent), but it needs the old owner as caller. The add-on passes a Forge `FakePlayer` carrying the old owner's UUID. |
 | Does `Claim.transferOwner(UUID)` update indexes? | No. It only sets the field (and the subclaims' owners). | Never called directly. |
 | How are used claim blocks computed? | `PlayerClaimData.usedClaimBlocks()` calls the private `calculateUsedClaimBlocks()`, which sums `getPlane()` over `allClaimsFromPlayer(uuid)` filtered to non-admin claims in every world, on every call. `OfflinePlayerData.usedClaimBlocks()` does the same. | (a) Losing a claim restores the old owner's allowance automatically, so **no refund is ever granted** (granting one would duplicate blocks). (b) Conquerors would be charged, so the add-on subtracts conquered land at the end of both methods. |
@@ -25,7 +25,7 @@ Everything below was established by disassembling the installed
 | Mixin | Target | Purpose |
 |---|---|---|
 | `ClaimAccessor` | `Claim.playersGroups`, `permissions`, `globalPerm` | Clear old trust data on conquest; read members for defender and raid checks. |
-| `ClaimMixin` | `Claim.canInteract(..)Z` at HEAD, null player only | Optional world effects during raids. |
+| `ClaimMixin` | `Claim.canInteract(..)Z` at HEAD, null player only | Raid world effects: explosions per source, fire, pistons, fluids. |
 | | `setPlayerGroup`, `setHomePos`, `setClaimName` at HEAD | Block management of claims without a flag on every path. |
 | `ClaimStorageMixin` | `resizeClaim` at HEAD | Block resize when pending, when conquered, or when the flag would end up outside. |
 | | `transferOwner` at HEAD | Block ordinary transfer of pending or conquered claims. |
@@ -119,3 +119,100 @@ restart.
 - `war_data.json` is written at most every 10 seconds when changed, and immediately after
   placement, relocation and conquest.
 - Boss bar updates are sent only when the title, percentage or colour changes.
+
+## 8. Raid permissions: mapping to Flan 1.7.2
+
+| Config option | Flan permission IDs |
+|---|---|
+| `allow_breaking` | `BREAK` |
+| `allow_placing` | `PLACE` (TNT is a block, so placing TNT is covered) |
+| `allow_containers` | `OPENCONTAINER`. Flan uses one permission for opening and taking items, so there is no separate "looting" option. |
+| `allow_doors_and_trapdoors` | `DOOR`, `TRAPDOOR`, `FENCEGATE` |
+| `allow_redstone_interactions` | `BUTTONLEVER`, `PRESSUREPLATE`, `REDSTONE`, `TARGETBLOCK` |
+| `allow_block_interactions` | `INTERACTBLOCK` (Flan's generic fallback, which is where crafting stations and most modded machines land), `ANVIL`, `ENCHANTMENTTABLE`, `BEACON`, `LECTERNTAKE`, `NOTEBLOCK`, `JUKEBOX` |
+| `allow_projectiles_and_pearls` | `PROJECTILES`, `ENDERPEARL`, `CHORUSFRUIT`, `TRAMPLE` |
+| `allow_entity_damage` | `HURTANIMAL`, `BREAKNONLIVING`, `ARMORSTAND`, `ITEMFRAMEROTATE` |
+| `allow_pvp` | `HURTPLAYER`, granted to everyone in the claim (members too, so defenders can fight back) |
+| `allow_buckets` | `BUCKET` |
+| `allow_fake_players` | `FAKEPLAYER` (Flan substitutes this for every action of a non-member fake player) |
+
+All of these go through `PermissionCheckEvent` and are answered live, so they stop the instant a
+raid ends. Explosions, fire, pistons and fluid flow have no player and are handled by the
+`canInteract(null, …)` hook (section 2).
+
+## 9. Explosions per source
+
+Flan's `Detonate` listener runs at normal priority. It removes each affected block for which
+`canInteract(null, EXPLOSIONS, pos)` is false, and it never touches the affected-entity list.
+The add-on hooks in at three points:
+
+1. **HIGHEST:** classify the explosion from `Explosion.getExploder()`:
+   - `TNTEntity` / `TNTMinecartEntity`: TNT;
+   - `CreeperEntity`: creeper;
+   - any other `net.minecraft.*` entity, or no entity: other;
+   - any other entity: modded.
+
+   The result is stored in a thread-local.
+2. **Flan (NORMAL):** for each block, the hook returns *allowed* only if a raid is active, the
+   block's parent claim is an ordinary claim (active, recovery or without a flag; never admin,
+   excluded or in a disabled dimension) and that source's option is on. Otherwise Flan's normal
+   answer stands. Admin-claim and wilderness blocks are untouched, so a mixed explosion is
+   filtered block by block.
+3. **LOW:** flags and the blocks under them are removed from the list.
+4. **LOWEST:** if `allow_explosion_entity_damage = false`, entities standing in raidable claims
+   are removed from the victim list during raids. Claims that still lose blocks get a raid
+   alert. Then the thread-local is cleared.
+
+Because the decision is made at detonation time, a fuse lit during a raid that ends before
+it explodes does no claim damage.
+
+## 10. Capture zone, aura and defender contesting
+
+`logic/CaptureZone` is the only zone geometry:
+
+- horizontal distance from the flag block's centre ≤ `capture.radius_blocks`;
+- feet between 1 block below and radius + 1 blocks above the flag base.
+
+Capture detection, contesting, the particle ring (points placed exactly on the radius,
+verified by the logic tests) and the action-bar distance all call it.
+
+Presence is rebuilt from the online player list at every evaluation (every 10 ticks). Each
+player in the zone is classified:
+
+- **defender:** the owner, the owner's FTB party, and Flan members per `trusted_defenders`;
+- **attacker:** everyone else;
+- **neutral:** members who are not defenders, and the owner if `owner_can_contest = false`.
+
+Players who died, logged out, teleported away, changed dimension or turned spectator are simply
+not in the next evaluation. Any defender present together with an attacker means CONTESTED: no
+gain and no decay. With no attackers, normal abandonment decay applies. After the raid, decay
+applies whoever is present.
+
+The ring is sent with per-player `spawnParticle`, only to players within
+`visibility_distance_blocks` of the flag. Nothing is broadcast and no chunk is loaded.
+
+## 11. Raid alerts
+
+There are three independent sources, and the derived state (`ClaimWarState`) never confuses them:
+
+- the raid window: global announcements only;
+- hostile actions: per-claim `AlertThrottle`;
+- the capture session.
+
+| Event | Output | Throttle |
+|---|---|---|
+| First hostile action, or first after the cooldown | Title, subtitle, sound, chat with claim name and coordinates | `ordinary_raid_cooldown_seconds` (45) |
+| Further hostile actions | Action bar "still under attack" | At most every 5 s |
+| Enemy at the flag (capture session starts) | High-priority title, horn sound, chat with progress | Never suppressed |
+| Capture becomes contested | Chat | At most every 15 s |
+| Capture fails or is cancelled by an admin | Chat | Once |
+| Claim conquered | Title, sound, chat to the previous owner and defenders | Once |
+
+- **Hostile actions:** a raid permission granted to a non-member, excluding pearls, chorus fruit,
+  trampling, pressure plates, projectiles, PvP and fake players (walking through is not an
+  attack). Also any explosion that removes the claim's blocks.
+- **Recipients:** the owner, defender members and party members (each configurable), minus
+  anyone who ran `/war alerts off`.
+- **Admin claims:** excluded by claim type at every trigger. The owner's op status plays no part.
+- **Offline owners:** events are kept in `war_data.json`, coalesced per claim and type within
+  10 minutes, at most 20 per player, and shown and cleared at login.

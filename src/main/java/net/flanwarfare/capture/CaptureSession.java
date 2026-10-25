@@ -19,6 +19,8 @@ final class CaptureSession {
     final CaptureModel model;
     final CapturerSelector selector = new CapturerSelector();
     final ServerBossInfo bar;
+    /** Owner was told this capture started (start alert is sent once real progress begins). */
+    boolean startAlertSent;
     private String lastTitle = "";
     private int lastPercent = -1;
     private CaptureModel.Status lastStatus;

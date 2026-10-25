@@ -8,6 +8,7 @@ import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.core.WarCore;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.ClaimState;
+import net.flanwarfare.protection.ExplosionRules;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
@@ -67,7 +68,7 @@ public final class Guards {
         }
         boolean wanted;
         if (permission == PermissionRegistry.EXPLOSIONS) {
-            wanted = WarConfig.ALLOW_EXPLOSIONS.get();
+            wanted = ExplosionRules.allowed(ExplosionRules.current());
         } else if (permission == PermissionRegistry.FIRESPREAD) {
             wanted = WarConfig.ALLOW_FIRE_SPREAD.get();
         } else if (permission == PermissionRegistry.PISTONBORDER) {
@@ -81,7 +82,9 @@ public final class Guards {
             return false;
         }
         ClaimRecord record = recordOf(core, claim);
-        return record != null && record.isWarEnabled() && !core.isDimensionDisabled(record.dimension);
+        // Claims without a flag are unprotected, so raids open them too.
+        return record != null && (record.isWarEnabled() || record.state == ClaimState.PENDING_FLAG)
+                && !core.isDimensionDisabled(record.dimension);
     }
 
     public static boolean blockResize(Claim claim, BlockPos from, BlockPos to, ServerPlayerEntity player) {

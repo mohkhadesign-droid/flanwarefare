@@ -39,7 +39,12 @@ public final class WarData {
         Map<UUID, String> designs = new HashMap<>();
         List<ConquestTxn> transactions = new ArrayList<>();
         List<OrphanFlag> orphanFlags = new ArrayList<>();
+        Map<UUID, List<AlertEntry>> alertHistory = new HashMap<>();
+        List<UUID> mutedAlerts = new ArrayList<>();
     }
+
+    private static final int MAX_ALERTS_PER_PLAYER = 20;
+    private static final long COALESCE_MILLIS = 10L * 60L * 1000L;
 
     private final Path file;
     private Snapshot state = new Snapshot();
@@ -78,6 +83,12 @@ public final class WarData {
             }
             if (loaded.orphanFlags == null) {
                 loaded.orphanFlags = new ArrayList<>();
+            }
+            if (loaded.alertHistory == null) {
+                loaded.alertHistory = new HashMap<>();
+            }
+            if (loaded.mutedAlerts == null) {
+                loaded.mutedAlerts = new ArrayList<>();
             }
             loaded.claims.values().removeIf(r -> r == null || r.claimId == null || r.dimension == null);
             data.state = loaded;
@@ -167,5 +178,56 @@ public final class WarData {
 
     public List<OrphanFlag> orphanFlags() {
         return state.orphanFlags;
+    }
+
+    /** Records an event for an offline player, coalescing repeats (bounded per player). */
+    public void recordAlert(UUID player, String type, UUID claimId, String label, String dimension, int x, int z) {
+        long now = System.currentTimeMillis();
+        List<AlertEntry> list = state.alertHistory.computeIfAbsent(player, p -> new ArrayList<>());
+        for (AlertEntry entry : list) {
+            if (entry.type.equals(type) && entry.claimId.equals(claimId) && now - entry.lastAt < COALESCE_MILLIS) {
+                entry.lastAt = now;
+                entry.count++;
+                dirty = true;
+                return;
+            }
+        }
+        AlertEntry entry = new AlertEntry();
+        entry.type = type;
+        entry.claimId = claimId;
+        entry.label = label;
+        entry.dimension = dimension;
+        entry.x = x;
+        entry.z = z;
+        entry.firstAt = now;
+        entry.lastAt = now;
+        entry.count = 1;
+        list.add(entry);
+        while (list.size() > MAX_ALERTS_PER_PLAYER) {
+            list.remove(0);
+        }
+        dirty = true;
+    }
+
+    /** Returns and clears a player's stored alerts. */
+    public List<AlertEntry> takeAlerts(UUID player) {
+        List<AlertEntry> list = state.alertHistory.remove(player);
+        if (list == null) {
+            return new ArrayList<>();
+        }
+        dirty = true;
+        return list;
+    }
+
+    public boolean isMuted(UUID player) {
+        return state.mutedAlerts.contains(player);
+    }
+
+    public void setMuted(UUID player, boolean muted) {
+        state.mutedAlerts.remove(player);
+        if (muted) {
+            state.mutedAlerts.add(player);
+        }
+        dirty = true;
     }
 }

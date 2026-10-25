@@ -108,6 +108,7 @@ public final class ConquestService {
                 return false;
             }
             String label = FlanBridge.label(claim);
+            Set<UUID> alertRecipients = core.alerts().recipients(claim);
             try {
                 apply(claim, record, txn);
             } catch (RuntimeException e) {
@@ -132,6 +133,8 @@ public final class ConquestService {
             core.audit("CONQUEST {}: claim {} ({}) transferred from {} to {}", txn.txnId, record.claimId, record.dimension,
                     oldOwner, winner);
             announce(label, oldOwner, winner);
+            core.alerts().conquered(alertRecipients, oldOwner, record, label, FlanBridge.playerName(core.server(), winner));
+            core.aura().conquestEffect(record);
             return true;
         } finally {
             locked = null;

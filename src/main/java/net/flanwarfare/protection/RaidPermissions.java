@@ -10,6 +10,7 @@ import net.flanwarfare.core.WarCore;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.ClaimState;
 import net.flanwarfare.flan.FlanBridge;
+import net.flanwarfare.raid.RaidScheduler;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.util.ActionResultType;
@@ -78,6 +79,11 @@ public final class RaidPermissions {
         if (!core.raid().isActive() || !record.isWarEnabled()) {
             return;
         }
+        // PvP is opened for everyone in a raidable claim, so its members can fight back too.
+        if (permission == PermissionRegistry.HURTPLAYER && core.raid().isRaidPermission(permission)) {
+            event.setResult(ActionResultType.SUCCESS);
+            return;
+        }
         UUID id = player.getUniqueID();
         boolean insider = !(player instanceof FakePlayer)
                 && (id.equals(claim.getOwner()) || FlanBridge.isMember(claim, id));
@@ -86,7 +92,24 @@ public final class RaidPermissions {
         }
         if (core.raid().isRaidPermission(permission)) {
             event.setResult(ActionResultType.SUCCESS);
+            if (!(player instanceof FakePlayer) && RaidScheduler.isHostileAction(permission)) {
+                core.alerts().hostileAction(claim, record, describe(permission));
+            }
         }
+    }
+
+    /** Short wording for the alert chat line. */
+    private static String describe(ClaimPermission permission) {
+        if (permission == PermissionRegistry.BREAK) {
+            return "breaking blocks";
+        }
+        if (permission == PermissionRegistry.PLACE) {
+            return "placing blocks";
+        }
+        if (permission == PermissionRegistry.OPENCONTAINER) {
+            return "opening containers";
+        }
+        return "using your blocks";
     }
 
     /** FLIGHT (allow flying), NOHUNGER (disable hunger), LOCKITEMS (lock death drops). */

@@ -32,6 +32,7 @@ import java.util.UUID;
  * <pre>
  * /war status                          raid state and next transition
  * /war capture                         captures on your claims or near you
+ * /war alerts on|off                   mute or unmute live raid alerts for yourself
  * /war admin reload                    re-validate config and rebuild caches
  * /war admin status                    diagnostics
  * /war admin mode disabled|always|custom
@@ -74,6 +75,17 @@ public final class WarCommand {
                     }
                     return 1;
                 })))
+                .then(Commands.literal("alerts")
+                        .then(Commands.literal("on").executes(ctx -> FlagCommand.withPlayer(ctx, (core, p) -> {
+                            core.data().setMuted(p.getUniqueID(), false);
+                            Msg.send(p, Msg.ok("Raid alerts for your claims are ON."));
+                            return 1;
+                        })))
+                        .then(Commands.literal("off").executes(ctx -> FlagCommand.withPlayer(ctx, (core, p) -> {
+                            core.data().setMuted(p.getUniqueID(), true);
+                            Msg.send(p, Msg.warn("Raid alerts for your claims are OFF. Turn them back on with /war alerts on."));
+                            return 1;
+                        }))))
                 .then(Commands.literal("admin")
                         .requires(src -> src.hasPermissionLevel(Msg.adminLevel()))
                         .then(Commands.literal("reload").executes(WarCommand::reload))
@@ -329,7 +341,8 @@ public final class WarCommand {
         }
         reply(ctx, "Claim " + record.claimId + " in " + record.dimension);
         reply(ctx, "State " + record.state + (record.recoveryReason == null ? "" : " (" + record.recoveryReason + ")")
-                + ", conquered=" + record.conquered + ", times conquered=" + record.timesConquered);
+                + ", conquered=" + record.conquered + ", times conquered=" + record.timesConquered
+                + ", live state " + core.warState(record));
         if (claim == null) {
             reply(ctx, "Flan: claim NOT FOUND.");
         } else {
@@ -420,7 +433,7 @@ public final class WarCommand {
         if (record == null) {
             return 0;
         }
-        boolean had = core.capture().cancel(record.claimId);
+        boolean had = core.capture().cancelByAdmin(record.claimId);
         audit(core, ctx, "capture cancel " + record.claimId);
         reply(ctx, had ? "Capture cancelled." : "No capture was running on that claim.");
         return 1;

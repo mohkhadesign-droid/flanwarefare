@@ -17,9 +17,10 @@ import java.util.UUID;
  *   <li><b>Side</b> of a player: their FTB Teams team when FTB Teams is available and enabled
  *   (a party groups its members; a solo player's own team is unique to them). Without FTB Teams
  *   every player is their own side.</li>
- *   <li><b>Defenders</b> of a claim: its owner; players on the owner's side; and, if enabled,
- *   Flan members whose group grants EDITCLAIM or EDITPERMS. Players trusted only for lesser
- *   permissions (e.g. one chest) are not defenders.</li>
+ *   <li><b>Defenders</b> of a claim (each configurable): its owner; players on the owner's FTB
+ *   team; Flan members per {@code trusted_defenders} (default: those whose group grants EDITCLAIM
+ *   or EDITPERMS). Other members, e.g. trusted for one chest, are neutral: they can neither
+ *   defend nor capture that claim.</li>
  * </ul>
  *
  * <p>FTB Teams is optional and accessed reflectively: it is not needed to build or run the
@@ -96,15 +97,49 @@ public final class SideResolver {
         return null;
     }
 
-    public boolean isDefender(ServerPlayerEntity player, Claim claim) {
+    /** How a player relates to a claim during capture. */
+    public enum Role {
+        /** Pauses the capture by standing in the zone. */
+        DEFENDER,
+        /** Can capture the claim. */
+        ATTACKER,
+        /** Neither: e.g. the owner with owner_can_contest=false, or a member trusted for one chest. */
+        NEUTRAL
+    }
+
+    /** True if both players are on the same FTB Teams team (never true without FTB Teams). */
+    public boolean sameTeam(UUID a, UUID b) {
+        if (a.equals(b) || !WarConfig.USE_FTB_TEAMS.get()) {
+            return false;
+        }
+        UUID teamA = teamOf(a);
+        return teamA != null && teamA.equals(teamOf(b));
+    }
+
+    /** Whether a claim member counts as a defender under capture.defenders.trusted_defenders. */
+    public static boolean isDefenderMember(Claim claim, UUID player) {
+        switch (WarConfig.DEFENDER_MEMBERS.get()) {
+            case ALL_MEMBERS:
+                return FlanBridge.isMember(claim, player);
+            case MANAGERS:
+                return FlanBridge.isManager(claim, player);
+            default:
+                return false;
+        }
+    }
+
+    public Role roleOf(ServerPlayerEntity player, Claim claim) {
         UUID id = player.getUniqueID();
         UUID owner = claim.getOwner();
         if (id.equals(owner)) {
-            return true;
+            return WarConfig.OWNER_CAN_CONTEST.get() ? Role.DEFENDER : Role.NEUTRAL;
         }
-        if (sideOf(id).equals(sideOf(owner))) {
-            return true;
+        if (sameTeam(id, owner)) {
+            return WarConfig.TEAM_MEMBERS_DEFEND.get() ? Role.DEFENDER : Role.NEUTRAL;
         }
-        return WarConfig.DEFENDERS_INCLUDE_MANAGERS.get() && FlanBridge.isManager(claim, id);
+        if (FlanBridge.isMember(claim, id)) {
+            return isDefenderMember(claim, id) ? Role.DEFENDER : Role.NEUTRAL;
+        }
+        return Role.ATTACKER;
     }
 }

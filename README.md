@@ -1,36 +1,35 @@
 # Flan Warfare & Conquest
 
 Server-side Forge 1.16.5 add-on for **Flan 1.16.5-1.7.2** that adds scheduled raid windows,
-mandatory claim flags, contested territory capture and permanent conquest.
+mandatory claim flags, contested territory capture with a visible capture zone, live raid
+alerts, and permanent conquest.
 
 - Players do **not** install anything. The mod registers no blocks, items or network channels.
+  Banners, particles, boss bars, titles and sounds are all vanilla.
 - Flan stays in charge of claims, owners, boundaries, trust and claim blocks. This add-on never
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** code complete. The pure logic (clock maths, capture rules, capturer selection) is
-> tested. The Minecraft-facing parts have **not** been compiled or run yet. See
-> `docs/TESTING.md` before using it on the live season server.
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and the
+> automated logic tests). The in-game behaviour has **not** been tested on a server yet.
+> Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
 ---
 
 ## Installation
 
-1. Build the JAR (GitHub Actions does this automatically, see below) or download it from the
-   latest workflow run: **Actions → Build → flanwarfare-jar**.
-2. Put `flanwarfare-1.0.0.jar` in the server's `mods/` folder **next to Flan 1.16.5-1.7.2**.
-   The mod refuses to load with any other Flan version.
+1. Download the JAR from the latest workflow run: **Actions → Build → flanwarfare-jar**.
+2. Put `flanwarfare-1.0.0.jar` in the **server's** `mods/` folder, next to Flan 1.16.5-1.7.2.
+   Do not install it on clients. The mod refuses to load with any other Flan version.
 3. Start the server once. The config appears at `world/serverconfig/flanwarfare-server.toml`.
 4. Edit it, then save. Forge reloads it automatically; `/war admin reload` re-validates it.
 
 Data is stored in `world/data/flanwarfare/war_data.json` (atomic writes, previous version kept as
 `war_data.json.bak`). Include it in backups together with `world/data/claims/`.
 
-### Building with GitHub Actions
+### Building
 
-Push this folder to a GitHub repository. The workflow in `.github/workflows/build.yml` runs
-`./gradlew build` on every push and uploads the JAR as an artifact. No local Java is needed.
-
+Every push runs `.github/workflows/build.yml`, which runs `./gradlew build` and uploads the JAR.
 To build locally instead: JDK 8, then `./gradlew build`. The JAR is `build/libs/flanwarfare-1.0.0.jar`.
 
 Flan itself is **not** in this repository (it is "All Rights Reserved"). The build compiles
@@ -48,27 +47,96 @@ and activates the claim. Reminders run for 10 minutes; after that the claim simp
 inactive. Claims that never get a flag expire after 24 hours (listed for admins, or
 automatically abandoned if `auto_abandon_expired_claims = true`).
 
-**Raid windows** follow the Overworld clock (default 15:00-06:00 in-game). During a raid,
-anyone who is not the owner or a Flan member of a claim may break, place and loot there. When
-the raid ends, protection returns instantly. Nothing is written to claims.
+### Night raids
 
-**Capturing.** During a raid, stand within 2 blocks of an enemy flag. A boss bar fills over 180
-seconds. A defender in range pauses it. Two rival sides in range pause it. If you leave, it
-drains over 60 seconds. When the raid ends, unfinished captures drain to zero, even with
-attackers still standing there, and the next raid always starts fresh.
+Raid windows follow the Overworld clock (default 15:00-06:00 in-game). During a raid, anyone
+who is not the owner or a Flan member of an ordinary claim can genuinely raid it:
 
-**Conquest.** At 100% the individual capturing player becomes the Flan owner of the claim.
-Boundaries, buildings and items stay. All old members, groups, overrides, subclaims, name,
-titles and potion effects are removed, and the home moves to the flag. The flag stays where it
-is and takes the conqueror's banner design. Conquered land costs no claim blocks and no claim
-slot, and it cannot be resized or transferred.
+- break and place blocks, including placing TNT;
+- open and loot chests, barrels, furnaces and modded inventories;
+- use doors, trapdoors, gates, buttons, levers, pressure plates, crafting stations and machines;
+- throw ender pearls and shoot projectiles;
+- hurt animals and break item frames and armour stands;
+- fight players. PvP is opened for both sides, so defenders can fight back.
 
-### Sides and defenders (confirmed policy)
+Explosions also damage raidable claims: TNT, creepers, other vanilla explosions and modded
+explosions each have their own switch. They are filtered **block by block**. In an explosion
+that overlaps an admin claim, only the raidable blocks are destroyed. Registered flags and the
+block under them always survive.
+
+The rules are checked at the moment something happens. When the raid ends, protection is back
+instantly, and TNT lit during the raid that explodes afterwards does no claim damage. Nothing is
+ever written to the claims themselves.
+
+Admin claims (your spawn), excluded claims, disabled dimensions and other protection mods
+(YAWP, WorldProtector) are never opened.
+
+### Capture zone, capturing and defending
+
+Every capturable flag shows a **ring of particles** on the ground: that is the capture zone,
+2 blocks around the flag. The ring is drawn with the same radius the server uses to detect
+players, from one shared setting. Its colour shows the state:
+
+- grey: idle;
+- red: being captured;
+- yellow: contested.
+
+A burst of particles marks a conquest. Players near the zone also get an action-bar readout,
+e.g. `Capture Zone - 1.4 / 2.0 blocks from flag - INSIDE`.
+
+During a raid, an enemy standing inside the zone fills a boss bar over 180 seconds.
+
+- **Defending is just standing there.** As soon as the owner, or another defender, is inside the
+  zone, progress pauses and the bar says **CONTESTED**. It stays paused until every defender has
+  left, died, logged out or changed dimension. There's no need to fight the raider.
+- Two rival attacking sides in the zone also pause it.
+- If the attackers leave, progress drains over 60 seconds. When the raid ends, unfinished
+  captures drain to zero even if attackers stay, and the next raid always starts fresh.
+
+### Live raid alerts
+
+When someone actually attacks your claim, you get a big centre-screen title, a warning sound and
+a chat line naming the claim and its coordinates. A raid window opening on its own never
+triggers this. Attacking means breaking, placing, looting, using your blocks, or an explosion
+destroying its blocks.
+
+- `YOUR BASE IS UNDER RAID!` appears for ordinary raiding. After the first title, a raider breaking
+  50 blocks only updates your action bar. A new title can come after 45 seconds.
+- `YOUR FLAG IS BEING CAPTURED!` appears immediately when an enemy is at your flag, even inside the
+  cooldown. Then you get chat updates when the capture is contested, fails, or is cancelled.
+- `YOUR CLAIM WAS CONQUERED!` appears if you lose it.
+
+These alerts go to:
+
+- the owner;
+- the claim's defender members (Flan managers);
+- the owner's FTB Teams party.
+
+Each of those can be switched off. Anyone can mute their own alerts with `/war alerts off`.
+
+If you were offline, you get a short summary at your next login. Admin claims never produce
+alerts. An admin's *ordinary* claims alert normally.
+
+### Conquest
+
+At 100% the individual capturing player becomes the Flan owner of the claim. Boundaries,
+buildings and items stay. All old members, groups, overrides, subclaims, name, titles and
+potion effects are removed, and the home moves to the flag. The flag stays where it is and takes
+the conqueror's banner design. Conquered land costs no claim blocks and no claim slot, and it
+cannot be resized or transferred.
+
+### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
   are their own side. Without FTB Teams, every player is their own side.
-- **Defenders of a claim:** the owner, players on the owner's FTB team, and Flan members whose
-  group grants `EDITCLAIM` or `EDITPERMS`. Someone trusted only for a chest is *not* a defender.
+- **Defenders of a claim:**
+  - the owner;
+  - players in the owner's FTB party;
+  - Flan members whose group grants `EDITCLAIM` or `EDITPERMS`. This is configurable: managers,
+    all members, or none.
+
+  A member trusted for less (say, one chest) is neutral: they can neither defend nor capture
+  that claim.
 - **Who gets the claim:** the first player of the capturing side to reach the flag, while they
   stay. If they leave, it goes to the longest continuously present teammate, with ties broken by
   UUID. Never random.
@@ -81,18 +149,22 @@ slot, and it cannot be resized or transferred.
 |---|---|
 | `/flag place` | Place the flag of the claim you stand in and activate it. |
 | `/flag move` | Move your flag to where you stand, inside the same claim. Owner only, never during raids, 5-minute cooldown. |
-| `/flag info` | State, flag position, conquest status, raid status. |
+| `/flag info` | State (including live state such as RAID_ACTIVITY or CAPTURE_CONTESTED), flag position, conquest status, raid status. |
 | `/flag abandon` / `/flag abandon confirm` | Delete one of your claims that never had a flag. |
 | `/flag design set` | Save the banner in your main hand as your design. The banner is not consumed. |
 | `/flag design apply` | Show your saved design on the flag of the claim you stand in. |
 | `/flag design reset` | Go back to the default banner. |
 | `/war status` | Whether a raid is active and when the next change happens. |
 | `/war capture` | Captures on your claims or within 64 blocks. |
+| `/war alerts on` / `off` | Unmute or mute live raid alerts for yourself. |
 
-**Flag placement rules:** you must stand in open air, inside your claim, on a solid
-non-falling block that isn't a container or machine. You need a clear 3x3 space, two blocks high,
-around you, fully inside the claim. No lava or fire may be adjacent, and other flags must be at
-least 4 blocks away.
+**Flag placement rules:**
+
+- Stand in open air, inside your claim, on a solid block. It can't be a falling block, a
+  container or a machine.
+- You need a clear 3x3 space, two blocks high, around you, fully inside the claim.
+- No lava or fire may be adjacent.
+- Other flags must be at least 4 blocks away.
 
 After placement nobody can put blocks into that space, or break the flag or the block under it.
 Attackers can always reach the flag by breaking through whatever surrounds the space.
@@ -107,12 +179,13 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin setwindow 15:00 06:00` | Change the custom raid window (saved). |
 | `/war admin flag restore <claim>` | Rebuild a missing flag at its registered position. |
 | `/war admin flag relocate <claim>` | Put the flag where you stand. This also activates a pending claim. |
-| `/war admin claim inspect [<claim>]` | State, owners, flag block, accounting and the conquest journal. Without an argument it uses the claim you stand in. |
+| `/war admin claim inspect [<claim>]` | State, live state, owners, flag block, accounting and the conquest journal. Without an argument it uses the claim you stand in. |
 | `/war admin claim repair <claim>` | Re-sync with Flan, retry interrupted conquests and restore the flag. |
-| `/war admin capture cancel <claim>` | Stop a capture in progress. |
+| `/war admin capture cancel <claim>` | Stop a capture in progress (the owner is told). |
 | `/war admin conquest rollback <claim>` | Give the claim back to its previous owner. Members and subclaims are not restored. |
 
-`<claim>` is the Flan claim UUID; press Tab to complete it. Operators who switch on Flan's own admin mode can still manage inactive claims through Flan.
+`<claim>` is the Flan claim UUID; press Tab to complete it. Operators who switch on Flan's own
+admin mode can still manage inactive claims through Flan.
 
 ---
 
@@ -125,22 +198,36 @@ values are:
 |---|---|---|
 | `raid.mode` | `CUSTOM` | `DISABLED`, `ALWAYS` or `CUSTOM` |
 | `raid.start_time` / `end_time` | `15:00` / `06:00` | In-game time. 06:00 = tick 0, 15:00 = 9000, 00:00 = 18000. Windows may cross midnight. |
-| `raid.allow_breaking` / `allow_placing` / `allow_containers` | `true` | Flan `BREAK`, `PLACE`, `OPENCONTAINER` |
-| `raid.allow_interactions` / `allow_buckets` | `false` | Doors, gates, buttons and similar / buckets |
-| `raid.extra_permissions` | `[]` | Any other Flan permission IDs, e.g. `["ANVIL"]` |
+| `raid.permissions.allow_breaking` / `allow_placing` / `allow_containers` | `true` | Flan `BREAK`, `PLACE`, `OPENCONTAINER` (opening and looting are one Flan permission) |
+| `raid.permissions.allow_doors_and_trapdoors` / `allow_redstone_interactions` / `allow_block_interactions` | `true` | Doors, gates; buttons, levers, plates, redstone; crafting stations and machines (`INTERACTBLOCK`) |
+| `raid.permissions.allow_projectiles_and_pearls` / `allow_entity_damage` / `allow_pvp` | `true` | |
+| `raid.permissions.allow_buckets` | `false` | Fluid placing |
+| `raid.permissions.extra_permissions` | `[]` | Any other Flan permission IDs, e.g. `["BED"]` |
+| `raid.world_effects.allow_tnt_explosions` / `creeper` / `other` / `modded` | `true` | Block damage per explosion source |
+| `raid.world_effects.allow_explosion_entity_damage` | `true` | `false` protects entities in raidable claims from explosions during raids |
+| `raid.world_effects.allow_fire_spread` / `allow_pistons` / `allow_fluid_griefing` / `allow_fake_players` | `false` | |
 | `raid.warning_seconds` | `[60, 10]` | Advance warnings before a raid |
 | `raid.disabled_dimensions` / `excluded_claims` | `[]` | Left entirely to Flan |
-| `raid.world_effects.*` | all `false` | Explosions, fire spread, pistons, fluids, fake players during raids |
 | `flags.placement_grace_seconds` | `600` | Reminder period (does not activate the claim) |
 | `flags.inactive_claim_expiration_seconds` | `86400` | Lifetime of claims without a flag |
 | `flags.auto_abandon_expired_claims` | `false` | Delete expired claims through Flan |
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
-| `capture.duration_seconds` / `decay_seconds` / `radius_blocks` | `180` / `60` / `2.0` | |
-| `capture.contest_by_defenders` / `contest_by_rival_attackers` | `true` | |
+| `capture.radius_blocks` | `2.0` | **The** capture radius: detection, contesting, aura and distance readout |
+| `capture.duration_seconds` / `decay_seconds` | `180` / `60` | |
+| `capture.contest_by_rival_attackers` | `true` | |
+| `capture.defenders.enabled` / `owner_can_contest` / `team_members_defend` | `true` | |
+| `capture.defenders.trusted_defenders` | `MANAGERS` | `MANAGERS`, `ALL_MEMBERS` or `NONE` |
+| `capture_aura.enabled` / `particle_interval_ticks` / `visibility_distance_blocks` | `true` / `10` / `24` | |
+| `capture_aura.show_idle_aura` / `show_active_aura` / `show_contested_aura` / `show_completion_effect` | `true` | |
+| `capture_aura.idle_color` / `active_color` / `contested_color` | grey / red / yellow | `#RRGGBB` |
+| `capture_aura.show_outside_raids` | `false` | Idle rings outside raids too |
+| `raid_notifications.enabled` / `notify_owner` / `notify_trusted_defenders` / `notify_team_members` | `true` | |
+| `raid_notifications.show_center_screen_title` / `play_warning_sound` / `show_chat_message` / `show_claim_coordinates` | `true` | |
+| `raid_notifications.ordinary_raid_cooldown_seconds` | `45` | |
+| `raid_notifications.capture_start_high_priority` / `offline_raid_summary` | `true` | |
 | `conquest.allow_conquered_claim_resize` | `false` | |
 | `conquest.max_conquered_claims_per_player` | `-1` | Unlimited |
 | `conquest.use_ftb_teams` | `true` | |
-| `conquest.defenders_include_flan_managers` | `true` | |
 | `general.prevent_sleep_time_skip_during_raids` | `true` | |
 
 Fixed rules (deliberately not configurable, for safety):
@@ -148,23 +235,29 @@ Fixed rules (deliberately not configurable, for safety):
 - Additional attackers never speed up a capture.
 - Progress never increases outside raids and never carries into the next raid window.
 - Capture progress is not saved, so a restart cancels running captures.
+- Admin claims are always excluded from raids, capture, auras and alerts.
 
 ---
 
 ## Known limitations
 
-- **Not yet compiled or run.** The build environment used to write this mod could not reach
-  Forge's servers. The first GitHub Actions build may surface small compile errors in Minecraft
-  method names. Paste the log and they get fixed. Follow `docs/TESTING.md` on a copy of the
-  server before the season.
+- **Not yet tested in game.** The build compiles and the logic tests pass. Follow
+  `docs/TESTING.md` on a copy of the server before the season.
+- **Modded explosions** are covered when the mod uses Forge's explosion event. Those with a
+  non-vanilla source entity count as "modded"; those without a source entity count as "other".
+  Mods that delete blocks directly (some bombs, mining lasers) bypass Flan and this add-on alike.
+- **Modded machines** count as containers or generic block interactions in Flan, so they follow
+  `allow_containers` / `allow_block_interactions`. There is no per-machine control.
 - **Modded machines** that set blocks without firing Forge events can still remove a flag. The
   add-on notices within 5 seconds and rebuilds it, and deletes fresh banner drops next to it. If
   it can't rebuild the flag 3 times in a row, the claim goes to `RECOVERY_REQUIRED`. The claim
   stays raidable and capturable, so destroying a flag never makes a claim immune.
+- **Particles** follow the player's own particle setting. With particles set to Minimal the ring
+  may be faint, but the action-bar distance readout still shows the zone.
 - **Sleep mods** that change time directly instead of through Forge's sleep event can skip raid
   time.
-- **FTB Teams** is accessed by reflection because its API could not be checked here.
-  `/war admin status` tells you whether it was detected. If not, every player is their own side.
+- **FTB Teams** is accessed by reflection. `/war admin status` tells you whether it was detected.
+  If not, every player is their own side and team alerts are off.
 - **Other protection mods** (YAWP, WorldProtector) still apply. Raid access only stops Flan from
   objecting; it cannot override them.
 - **Conquest crash safety:** Flan writes one file per owner, so a crash in the few milliseconds

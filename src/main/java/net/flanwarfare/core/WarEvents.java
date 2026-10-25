@@ -5,6 +5,7 @@ import net.flanwarfare.command.FlagCommand;
 import net.flanwarfare.command.WarCommand;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.data.ClaimRecord;
+import net.flanwarfare.protection.ExplosionRules;
 import net.flanwarfare.protection.FlagProtection;
 import net.flanwarfare.protection.RaidPermissions;
 import net.flanwarfare.util.Msg;
@@ -29,6 +30,7 @@ import java.util.List;
 public final class WarEvents {
     private final RaidPermissions permissions = new RaidPermissions();
     private final FlagProtection protection = new FlagProtection();
+    private final ExplosionRules explosions = new ExplosionRules();
 
     /** LOWEST so Flan (which loads claims while worlds are created) is completely ready. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -78,9 +80,21 @@ public final class WarEvents {
         protection.onFluidPlace(event);
     }
 
+    /** Before Flan's own (normal priority) filtering: record what caused the explosion. */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onExplosionStart(ExplosionEvent.Detonate event) {
+        explosions.begin(event);
+    }
+
     @SubscribeEvent(priority = EventPriority.LOW)
     public void onExplosion(ExplosionEvent.Detonate event) {
         protection.onExplosion(event);
+    }
+
+    /** After Flan and flag protection: entity rule, raid alerts, clear the context. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onExplosionEnd(ExplosionEvent.Detonate event) {
+        explosions.end(event);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -122,6 +136,7 @@ public final class WarEvents {
         }
         ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
         Msg.send(player, Msg.info(core.raid().statusLine()));
+        core.alerts().loginSummary(player);
         List<ClaimRecord> pending = core.lifecycle().pendingOf(player.getUniqueID());
         if (!pending.isEmpty()) {
             Msg.send(player, Msg.warn("You have " + pending.size() + " inactive claim(s) without a flag. "

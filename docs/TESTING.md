@@ -29,7 +29,18 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 | After the raid: decays even with attackers present, never completes | `decayAfterRaidEvenWithAttackers` | as specified | **PASS** |
 | Capturer: initiator kept; then longest present; returning player does not regain the role; UUID tie-break; reset on side change | `capturerPolicy` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 56 checks passed`.
+| Defender entering at 99% prevents completion and freezes progress | `defenderAt99Percent` | CONTESTED, 3560/3600 kept | **PASS** |
+| Owner steps out for exactly one evaluation, then back in | `ownerExitsAndReenters` | gains exactly one step, then paused | **PASS** |
+| Two defenders alternating (always one present) | `alternatingDefenders` | stays paused | **PASS** |
+| Attacker and defender enter on the same evaluation | `simultaneousEntry` | CONTESTED, 0 progress | **PASS** |
+| Raid ends while contested | `raidEndsWhileContested` | decays 50% to 25% in 15 s | **PASS** |
+| Attackers leave, defender stays | `defenderAloneDecays` | normal abandonment decay | **PASS** |
+| Zone geometry; every aura point on the capture radius; distance readout | `zoneGeometry` | as specified | **PASS** |
+| 50 blocks broken in 25 s: 1 title, at most 1 hint per 5 s; new title after cooldown; contest throttle | `alertThrottle` | 1 title, 4 hints | **PASS** |
+| Live state derivation (capture beats raid activity; raid window alone is PEACEFUL) | `warStates` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 83 checks passed` (locally, and on every GitHub
+Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
 
@@ -71,6 +82,33 @@ Result of the last run: `LogicSelfTest: all 56 checks passed`.
 | 34 | Crash during conquest | Kill the server process (no clean stop) right after a conquest message; also test a kill between journal and Flan save (needs a debug build or timing). | Startup log shows COMMITTED or ABORTED, never a duplicate owner, never extra blocks. |
 | 35 | Beds during raids | Sleep during a raid. | Spawn point set; time does not skip. Outside raids, a skip stops at raid start. |
 | 36 | No client mod | Join with a vanilla-Forge client that lacks the mod. | Can join; all text, bars and banners visible. |
+
+## Additional in-game scenarios for raids, aura, contesting and alerts (all NOT RUN)
+
+| # | Scenario | How to test | Expected |
+|---|---|---|---|
+| A1 | TNT in an ordinary claim | During a raid, B places and lights TNT in A's active claim. | Blocks destroyed; flag and the block under it intact; A gets "UNDER RAID" title. |
+| A2 | TNT in the admin claim | Same at spawn. | Nothing destroyed (Flan's normal protection). No alert to anyone. |
+| A3 | Explosion on the border | TNT straddling A's claim and the admin claim. | Only A's blocks (and wilderness, per Flan) destroyed. |
+| A4 | Looting | B opens and empties A's chest and furnace, plus a modded machine. | Allowed. |
+| A5 | Doors, buttons, levers | B uses them. | Allowed. |
+| A6 | Raid end | `/time set 0`, then B retries A1, A4 and A5; also light TNT just before the end. | All denied. A fuse that explodes after the end damages nothing. |
+| A7 | Aura visible | Stand near A's flag during a raid. | Grey ring on the ground around the flag. |
+| A8 | Aura matches radius | Walk outward watching the action bar. | "INSIDE" exactly while within the ring; capture starts only inside. |
+| A9 | No aura at spawn | Look around the admin claim. | No ring. |
+| A10 | Capture begins | B enters the ring. | Ring turns red; boss bar; A gets "YOUR FLAG IS BEING CAPTURED!" title. |
+| A11 | Owner pauses it | A steps into the ring. | Within half a second: CONTESTED, yellow ring, frozen percentage. |
+| A12 | Paused while any defender stays | A and a manager-member both inside, A leaves. | Still CONTESTED. |
+| A13 | Resumes after all leave | Both leave, B stays. | Capturing resumes from the same percentage. |
+| A14 | Defender at 99% | Let it reach 99%, then A enters. | Never completes while A stays. |
+| A15 | Immediate raid alert | B breaks one block in A's claim during a raid. | Title, sound, chat with claim name and X/Z. |
+| A16 | Capture alert priority | Right after A15, B goes to the flag. | Capture title shown despite the cooldown. |
+| A17 | No spam | B breaks 50 blocks. | One title, then occasional action-bar lines only. |
+| A18 | Correct claim named | A owns two claims; B attacks the second. | The alert names the second claim and its coordinates. |
+| A19 | Offline summary | A offline; B raids and tries to capture; A logs in. | Summary lines listing the claim and events. |
+| A20 | Admin claim silent | B attacks around spawn. | The admin (spawn owner) gets no alerts. |
+| A21 | Admin's ordinary claim | The admin owns a normal flagged claim; B raids it. | The admin gets normal alerts. |
+| A22 | Vanilla client | Join without the mod. | Titles, sounds, ring and boss bar all visible. |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.

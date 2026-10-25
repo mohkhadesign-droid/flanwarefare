@@ -113,6 +113,7 @@ public final class ClaimLifecycle {
             core.flags().removeFlagOf(record);
             core.data().claims().remove(record.claimId);
             core.capture().cancel(record.claimId);
+            core.alerts().forget(record.claimId);
             core.data().markDirty();
             core.audit("Claim {} no longer exists in Flan; record and flag removed", record.claimId);
         }

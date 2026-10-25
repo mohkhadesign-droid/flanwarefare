@@ -87,7 +87,7 @@ public final class FlagCommand {
         } else if (record.state == ClaimState.RECOVERY_REQUIRED) {
             state = "RECOVERY REQUIRED: flag needs an administrator (still raidable and capturable).";
         } else {
-            state = "ACTIVE.";
+            state = "ACTIVE (" + core.warState(record) + ").";
         }
         Msg.send(player, Msg.info("State: " + state));
         if (record.hasFlag) {

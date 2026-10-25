@@ -26,6 +26,15 @@ public final class LogicSelfTest {
         decayWhenAttackersLeave();
         decayAfterRaidEvenWithAttackers();
         capturerPolicy();
+        defenderAt99Percent();
+        ownerExitsAndReenters();
+        alternatingDefenders();
+        simultaneousEntry();
+        raidEndsWhileContested();
+        defenderAloneDecays();
+        zoneGeometry();
+        alertThrottle();
+        warStates();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -195,6 +204,108 @@ public final class LogicSelfTest {
         eq(b, tie.designated(), "tie broken by lowest UUID");
         tie.update(5, "U", set(c));
         eq(c, tie.designated(), "side change resets participation");
+    }
+
+    private static void defenderAt99Percent() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        run(m, 356, sides("A"), false); // 3560 ticks = 98.9%
+        check(m.fraction() > 0.98 && m.status() == CaptureModel.Status.CAPTURING, "reached 99%");
+        run(m, 500, sides("A"), true);
+        eq(CaptureModel.Status.CONTESTED, m.status(), "defender at 99% contests");
+        check(m.status() != CaptureModel.Status.COMPLETE, "defender at 99% prevents completion");
+        eqd(3560, m.progressTicks(), "no progress while defender stays");
+    }
+
+    private static void ownerExitsAndReenters() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        run(m, 100, sides("A"), false); // 1000
+        run(m, 10, sides("A"), true);
+        run(m, 1, sides("A"), false); // owner steps out for one evaluation: +10
+        run(m, 10, sides("A"), true);
+        eqd(1010, m.progressTicks(), "exit for one evaluation gains exactly one step, re-entry pauses again");
+    }
+
+    private static void alternatingDefenders() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        run(m, 100, sides("A"), false);
+        double before = m.progressTicks();
+        // Defender 1 leaves on the same evaluation defender 2 arrives: at least one present every step.
+        for (int i = 0; i < 40; i++) {
+            m.step(10, true, sides("A"), true, true, true);
+        }
+        eqd(before, m.progressTicks(), "continuous defender presence keeps it paused");
+    }
+
+    private static void simultaneousEntry() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        m.step(10, true, sides("A"), true, true, true);
+        eq(CaptureModel.Status.CONTESTED, m.status(), "attacker and defender arriving together: contested");
+        eqd(0, m.progressTicks(), "no progress on simultaneous entry");
+    }
+
+    private static void raidEndsWhileContested() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        run(m, 180, sides("A"), false); // 50%
+        run(m, 10, sides("A"), true);
+        for (int i = 0; i < 30; i++) {
+            m.step(10, false, sides("A"), true, true, true); // raid over, both still there
+        }
+        eqd(0.25, m.fraction(), "post-raid decay applies even while contested");
+    }
+
+    private static void defenderAloneDecays() {
+        CaptureModel m = new CaptureModel(3600, 1200);
+        run(m, 180, sides("A"), false); // 50%
+        run(m, 30, Collections.<String>emptySet(), true); // attackers gone, defender stays
+        eqd(0.25, m.fraction(), "attackers gone: abandonment decay even with defender present");
+    }
+
+    private static void zoneGeometry() {
+        check(CaptureZone.inside(10.5, 64, 12.5, 10, 64, 10, 2.0), "2.0 blocks: inside");
+        check(!CaptureZone.inside(10.5, 64, 12.6, 10, 64, 10, 2.0), "2.1 blocks: outside");
+        check(!CaptureZone.inside(10.5, 62.9, 10.5, 10, 64, 10, 2.0), "too far below");
+        check(!CaptureZone.inside(10.5, 67.1, 10.5, 10, 64, 10, 2.0), "too far above");
+        boolean allOnRadius = true;
+        for (int i = 0; i < 24; i++) {
+            double[] p = CaptureZone.ringPoint(10, 10, 2.0, i, 24);
+            allOnRadius &= Math.abs(CaptureZone.horizontalDistance(p[0], p[1], 10, 10) - 2.0) < 1e-9;
+        }
+        check(allOnRadius, "every aura particle lies exactly on the capture radius");
+        eqd(1.5, CaptureZone.horizontalDistance(12.0, 10.5, 10, 10), "action-bar distance");
+    }
+
+    private static void alertThrottle() {
+        AlertThrottle t = new AlertThrottle();
+        int titles = 0;
+        int hints = 0;
+        for (int i = 0; i < 50; i++) { // 50 blocks broken over 25 seconds
+            AlertThrottle.Decision d = t.hostile(i * 500L, 45000L, 5000L);
+            if (d == AlertThrottle.Decision.TITLE) {
+                titles++;
+            } else if (d == AlertThrottle.Decision.HINT) {
+                hints++;
+            }
+        }
+        eq(1, titles, "50 breaks: one title");
+        eq(4, hints, "50 breaks: action-bar hint at most every 5 s");
+        check(t.underAttack(30000L, 45000L), "under attack within cooldown");
+        check(!t.underAttack(24500L + 45000L, 45000L), "peaceful after cooldown without activity");
+        eq(AlertThrottle.Decision.TITLE, t.hostile(24500L + 45000L, 45000L, 5000L), "new title after cooldown");
+        check(t.contestUpdate(0, 15000L) && !t.contestUpdate(5000L, 15000L) && t.contestUpdate(15000L, 15000L),
+                "contest updates throttled to one per 15 s");
+    }
+
+    private static void warStates() {
+        eq(net.flanwarfare.alerts.ClaimWarState.CAPTURE_CONTESTED,
+                net.flanwarfare.alerts.ClaimWarState.of(CaptureModel.Status.CONTESTED, true, true), "capture state wins");
+        eq(net.flanwarfare.alerts.ClaimWarState.RAID_ACTIVITY,
+                net.flanwarfare.alerts.ClaimWarState.of(null, true, false), "raid activity");
+        eq(net.flanwarfare.alerts.ClaimWarState.CAPTURE_DECAYING,
+                net.flanwarfare.alerts.ClaimWarState.of(CaptureModel.Status.DECAYING, false, false), "decaying");
+        eq(net.flanwarfare.alerts.ClaimWarState.PEACEFUL,
+                net.flanwarfare.alerts.ClaimWarState.of(null, false, false), "raid window alone is peaceful");
+        eq(net.flanwarfare.alerts.ClaimWarState.CONQUERED,
+                net.flanwarfare.alerts.ClaimWarState.of(null, false, true), "conquered when quiet");
     }
 
     private static Set<UUID> set(UUID... ids) {

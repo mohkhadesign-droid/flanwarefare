@@ -6,6 +6,8 @@ import net.flanwarfare.core.WarCore;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.logic.CaptureModel;
+import net.flanwarfare.logic.CaptureZone;
+import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
 
@@ -20,17 +22,24 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Evaluates every capture area on a fixed interval (default every 10 ticks) using only
- * server-side positions. Cost per evaluation is (online players x flags in their dimension),
- * which is tiny for a 15-player server; no blocks are scanned and no chunks are loaded.
+ * Evaluates every capture zone on a fixed interval (default every 10 ticks) using only
+ * server-side positions and {@link CaptureZone}. Cost per evaluation is (online players x flags
+ * in their dimension); no blocks are scanned and no chunks are loaded.
+ *
+ * <p>Presence is recomputed from scratch at every evaluation, so a defender who dies, logs out,
+ * changes dimension, teleports away or turns spectator stops contesting at the next evaluation,
+ * and an attacker and a defender entering on the same evaluation always yield CONTESTED.
  */
 public final class CaptureManager {
+
+    /** Why a session ended; decides which alert (if any) the owner gets. */
+    private enum End { FAILED, CONQUERED, CANCELLED, SILENT }
 
     private static final class Presence {
         final Set<String> attackerSides = new HashSet<>();
         final Map<String, Set<UUID>> attackersBySide = new HashMap<>();
         final Set<UUID> everyone = new HashSet<>();
-        boolean defender;
+        int defenders;
     }
 
     private static final Presence NOBODY = new Presence();
@@ -50,12 +59,7 @@ public final class CaptureManager {
         boolean raidOpen = core.raid().isActive();
         long windowId = core.raid().windowId();
 
-        Map<String, List<ClaimRecord>> flagsByDimension = new HashMap<>();
-        for (ClaimRecord record : core.data().claims().values()) {
-            if (record.hasFlag && record.isWarEnabled() && !core.isDimensionDisabled(record.dimension)) {
-                flagsByDimension.computeIfAbsent(record.dimension, d -> new ArrayList<>()).add(record);
-            }
-        }
+        Map<String, List<ClaimRecord>> flagsByDimension = capturableFlagsByDimension();
         if (flagsByDimension.isEmpty() && sessions.isEmpty()) {
             return;
         }
@@ -63,7 +67,6 @@ public final class CaptureManager {
         Map<UUID, Claim> claims = new HashMap<>();
         Map<UUID, Presence> presence = new HashMap<>();
         double radius = WarConfig.CAPTURE_RADIUS.get();
-        double radiusSq = radius * radius;
         for (ServerPlayerEntity player : core.server().getPlayerList().getPlayers()) {
             if (!canTakePart(player)) {
                 continue;
@@ -73,10 +76,8 @@ public final class CaptureManager {
                 continue;
             }
             for (ClaimRecord record : flags) {
-                double dx = player.getPosX() - (record.flagX + 0.5);
-                double dz = player.getPosZ() - (record.flagZ + 0.5);
-                double dy = player.getPosY() - record.flagY;
-                if (dx * dx + dz * dz > radiusSq || dy < -1.0 || dy > radius + 1.0) {
+                if (!CaptureZone.inside(player.getPosX(), player.getPosY(), player.getPosZ(),
+                        record.flagX, record.flagY, record.flagZ, radius)) {
                     continue;
                 }
                 Claim claim = claims.computeIfAbsent(record.claimId, id -> FlanBridge.find(core.server(), record));
@@ -84,9 +85,13 @@ public final class CaptureManager {
                     continue;
                 }
                 Presence p = presence.computeIfAbsent(record.claimId, id -> new Presence());
+                SideResolver.Role role = core.sides().roleOf(player, claim);
+                if (role == SideResolver.Role.NEUTRAL) {
+                    continue;
+                }
                 p.everyone.add(player.getUniqueID());
-                if (core.sides().isDefender(player, claim)) {
-                    p.defender = true;
+                if (role == SideResolver.Role.DEFENDER) {
+                    p.defenders++;
                 } else {
                     String side = core.sides().sideOf(player.getUniqueID());
                     p.attackerSides.add(side);
@@ -102,7 +107,19 @@ public final class CaptureManager {
         }
     }
 
-    private boolean canTakePart(ServerPlayerEntity player) {
+    /** Flags whose zone is live: placed, ACTIVE/RECOVERY claim, enabled dimension. */
+    Map<String, List<ClaimRecord>> capturableFlagsByDimension() {
+        Map<String, List<ClaimRecord>> byDimension = new HashMap<>();
+        for (ClaimRecord record : core.data().claims().values()) {
+            if (record.hasFlag && record.isWarEnabled() && !core.isDimensionDisabled(record.dimension)) {
+                byDimension.computeIfAbsent(record.dimension, d -> new ArrayList<>()).add(record);
+            }
+        }
+        return byDimension;
+    }
+
+    /** Online, alive, not spectating, and not creative unless configured. */
+    public static boolean canTakePart(ServerPlayerEntity player) {
         if (!player.isAlive() || player.isSpectator()) {
             return false;
         }
@@ -117,7 +134,7 @@ public final class CaptureManager {
         }
         if (record == null || claim == null || claim.isAdminClaim() || !record.isWarEnabled() || !record.hasFlag
                 || core.isExcluded(claim)) {
-            cancel(claimId);
+            close(claimId, End.SILENT, null, null);
             return;
         }
         CaptureSession session = sessions.get(claimId);
@@ -126,44 +143,67 @@ public final class CaptureManager {
             if (!raidOpen || !attackers) {
                 return;
             }
-            session = open(claim, record, windowId);
+            session = open(record, windowId);
         } else if (raidOpen && session.windowId != windowId && attackers) {
             // Progress from an earlier raid window is never reused: start fresh.
-            cancel(claimId);
-            session = open(claim, record, windowId);
+            close(claimId, End.SILENT, null, null);
+            session = open(record, windowId);
         }
 
         boolean progressAllowed = raidOpen && session.windowId == windowId;
-        CaptureModel.Status status = session.model.step(dt, progressAllowed, presence.attackerSides, presence.defender,
-                WarConfig.CONTEST_BY_DEFENDERS.get(), WarConfig.CONTEST_BY_RIVALS.get());
+        CaptureModel.Status before = session.model.status();
+        CaptureModel.Status status = session.model.step(dt, progressAllowed, presence.attackerSides,
+                presence.defenders > 0, WarConfig.CONTEST_BY_DEFENDERS.get(), WarConfig.CONTEST_BY_RIVALS.get());
         String side = session.model.side();
         Set<UUID> sidePlayers = side == null ? Collections.<UUID>emptySet()
                 : presence.attackersBySide.getOrDefault(side, Collections.<UUID>emptySet());
         session.selector.update(core.ticks(), side, sidePlayers);
 
+        int percent = (int) Math.floor(session.model.fraction() * 100.0);
+        if (!session.startAlertSent && progressAllowed && attackers
+                && (status == CaptureModel.Status.CAPTURING || status == CaptureModel.Status.CONTESTED)) {
+            // An enemy is at the flag: alert even if a defender is already there.
+            session.startAlertSent = true;
+            core.alerts().captureStarted(claim, record, percent);
+        } else if (status == CaptureModel.Status.CONTESTED && before != CaptureModel.Status.CONTESTED
+                && session.startAlertSent) {
+            core.alerts().captureContested(claim, record, percent, presence.defenders > 0);
+        }
+
         if (status == CaptureModel.Status.COMPLETE) {
             UUID winner = session.selector.designated();
-            cancel(claimId);
-            if (winner != null && progressAllowed) {
-                core.conquest().complete(claim, record, winner, presence.everyone);
-            }
+            boolean conquered = winner != null && progressAllowed
+                    && core.conquest().complete(claim, record, winner, presence.everyone);
+            close(claimId, conquered ? End.CONQUERED : End.FAILED, claim, record);
             return;
         }
         if (session.model.isFinished() && presence.everyone.isEmpty()) {
-            cancel(claimId);
+            close(claimId, End.FAILED, claim, record);
             return;
         }
         session.updateBar(title(claim, session, status, progressAllowed), viewers(record));
     }
 
-    private CaptureSession open(Claim claim, ClaimRecord record, long windowId) {
+    private CaptureSession open(ClaimRecord record, long windowId) {
         CaptureSession session = new CaptureSession(record.claimId, record.dimension, windowId,
                 WarConfig.CAPTURE_SECONDS.get() * 20L, WarConfig.DECAY_SECONDS.get() * 20L);
         sessions.put(record.claimId, session);
-        ServerPlayerEntity owner = core.server().getPlayerList().getPlayerByUUID(claim.getOwner());
-        Msg.send(owner, Msg.error("Your claim '" + FlanBridge.label(claim) + "' is being captured! Defend its flag at "
-                + record.flagX + ", " + record.flagY + ", " + record.flagZ + "."));
         return session;
+    }
+
+    private void close(UUID claimId, End reason, Claim claim, ClaimRecord record) {
+        CaptureSession session = sessions.remove(claimId);
+        if (session == null) {
+            return;
+        }
+        session.close();
+        if (session.startAlertSent && claim != null && record != null) {
+            if (reason == End.FAILED) {
+                core.alerts().captureFailed(claim, record);
+            } else if (reason == End.CANCELLED) {
+                core.alerts().captureCancelled(claim, record);
+            }
+        }
     }
 
     private String title(Claim claim, CaptureSession session, CaptureModel.Status status, boolean progressAllowed) {
@@ -171,7 +211,7 @@ public final class CaptureManager {
         String state;
         switch (status) {
             case CONTESTED:
-                state = "Contested";
+                state = "CONTESTED";
                 break;
             case DECAYING:
                 state = progressAllowed ? "Losing progress" : "Raid over - decaying";
@@ -196,23 +236,40 @@ public final class CaptureManager {
             if (!FlanBridge.dimensionId(player.world).equals(record.dimension)) {
                 continue;
             }
-            double dx = player.getPosX() - (record.flagX + 0.5);
-            double dy = player.getPosY() - record.flagY;
-            double dz = player.getPosZ() - (record.flagZ + 0.5);
-            if (dx * dx + dy * dy + dz * dz <= rangeSq) {
+            if (player.getDistanceSq(record.flagX + 0.5, record.flagY, record.flagZ + 0.5) <= rangeSq) {
                 viewers.add(player);
             }
         }
         return viewers;
     }
 
-    public boolean cancel(UUID claimId) {
-        CaptureSession session = sessions.remove(claimId);
-        if (session != null) {
-            session.close();
-            return true;
+    /** Current capture status of a claim's flag, or null if no capture session exists. */
+    public CaptureModel.Status statusOf(UUID claimId) {
+        CaptureSession session = sessions.get(claimId);
+        return session == null ? null : session.model.status();
+    }
+
+    public int percentOf(UUID claimId) {
+        CaptureSession session = sessions.get(claimId);
+        return session == null ? 0 : (int) Math.floor(session.model.fraction() * 100.0);
+    }
+
+    /** Administrator cancellation (tells the owner the attempt ended). */
+    public boolean cancelByAdmin(UUID claimId) {
+        if (!sessions.containsKey(claimId)) {
+            return false;
         }
-        return false;
+        ClaimRecord record = core.data().claim(claimId);
+        Claim claim = record == null ? null : FlanBridge.find(core.server(), record);
+        close(claimId, End.CANCELLED, claim, record);
+        return true;
+    }
+
+    /** Silent cancellation (claim deleted, record removed). */
+    public boolean cancel(UUID claimId) {
+        boolean had = sessions.containsKey(claimId);
+        close(claimId, End.SILENT, null, null);
+        return had;
     }
 
     public void clearAll() {
@@ -240,17 +297,6 @@ public final class CaptureManager {
             boolean near = dim.equals(record.dimension)
                     && player.getDistanceSq(record.flagX + 0.5, record.flagY, record.flagZ + 0.5) <= 64 * 64;
             if (own || near || player.hasPermissionLevel(Msg.adminLevel())) {
-                lines.add(describe(session, record));
-            }
-        }
-        return lines;
-    }
-
-    public List<String> describeAll() {
-        List<String> lines = new ArrayList<>();
-        for (CaptureSession session : sessions.values()) {
-            ClaimRecord record = core.data().claim(session.claimId);
-            if (record != null) {
                 lines.add(describe(session, record));
             }
         }
