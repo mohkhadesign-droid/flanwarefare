@@ -4,6 +4,8 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.flanwarfare.FlanWarfare;
 import net.flanwarfare.config.WarConfig;
 import net.minecraft.block.BannerBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
 import net.minecraft.block.BlockState;
 import net.minecraft.item.BannerItem;
 import net.minecraft.item.DyeColor;
@@ -13,8 +15,11 @@ import net.minecraft.nbt.JsonToNBT;
 import net.minecraft.state.properties.BlockStateProperties;
 import net.minecraft.tileentity.BannerTileEntity;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.Direction;
+import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.server.ServerWorld;
+import net.minecraftforge.registries.ForgeRegistries;
 
 /**
  * Vanilla banner designs, stored as the SNBT of a one-item banner stack (base colour comes
@@ -72,6 +77,24 @@ public final class BannerDesigns {
     public static void place(ServerWorld world, BlockPos pos, ItemStack banner, int rotation) {
         BlockState state = standingState(banner, rotation);
         world.setBlockState(pos, state, 3);
+        writePatterns(world, pos, banner);
+    }
+
+    /** Wall-banner block of the design's colour (e.g. minecraft:red_wall_banner). */
+    public static Block wallBlock(ItemStack banner) {
+        Block block = ForgeRegistries.BLOCKS.getValue(
+                new ResourceLocation("minecraft", color(banner).getTranslationKey() + "_wall_banner"));
+        return block == null ? Blocks.WHITE_WALL_BANNER : block;
+    }
+
+    /** Wall banner hanging on the block behind it, its front facing {@code facing}. */
+    public static BlockState wallState(ItemStack banner, Direction facing) {
+        return wallBlock(banner).getDefaultState().with(BlockStateProperties.HORIZONTAL_FACING, facing);
+    }
+
+    /** Places (or replaces) a wall banner and writes its pattern layers. */
+    public static void placeWall(ServerWorld world, BlockPos pos, ItemStack banner, Direction facing) {
+        world.setBlockState(pos, wallState(banner, facing), 3);
         writePatterns(world, pos, banner);
     }
 

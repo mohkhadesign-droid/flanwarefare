@@ -8,6 +8,8 @@ import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.logic.CaptureModel;
 import net.flanwarfare.logic.CaptureZone;
 import net.flanwarfare.logic.DefenseRules;
+import net.flanwarfare.logic.FlagAnimation;
+import net.flanwarfare.flag.BannerDesigns;
 import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
@@ -75,6 +77,7 @@ public final class CaptureManager {
         Map<UUID, Boolean> slots = new HashMap<>();
         long now = System.currentTimeMillis();
         double radius = WarConfig.CAPTURE_RADIUS.get();
+        double tolerance = WarConfig.VERTICAL_TOLERANCE.get();
         for (ServerPlayerEntity player : core.server().getPlayerList().getPlayers()) {
             if (!canTakePart(player)) {
                 continue;
@@ -85,7 +88,7 @@ public final class CaptureManager {
             }
             for (ClaimRecord record : flags) {
                 if (!CaptureZone.inside(player.getPosX(), player.getPosY(), player.getPosZ(),
-                        record.flagX, record.flagY, record.flagZ, radius)) {
+                        record.flagX, record.flagY, record.flagZ, radius, tolerance)) {
                     continue;
                 }
                 Claim claim = claims.computeIfAbsent(record.claimId, id -> FlanBridge.find(core.server(), record));
@@ -195,6 +198,12 @@ public final class CaptureManager {
             session = open(record, windowId);
         }
 
+        long captureTicks = WarConfig.CAPTURE_SECONDS.get() * 20L;
+        long decayTicks = WarConfig.DECAY_SECONDS.get() * 20L;
+        if (session.model.captureTicks() != captureTicks || session.model.decayTicks() != decayTicks) {
+            // Global capture time changed: keep the percentage, rescale the remaining time.
+            session.model.rescale(captureTicks, decayTicks);
+        }
         boolean progressAllowed = raidOpen && session.windowId == windowId && !immune;
         CaptureModel.Status before = session.model.status();
         CaptureModel.Status status = session.model.step(dt, progressAllowed, presence.attackerSides,
@@ -211,6 +220,8 @@ public final class CaptureManager {
         Set<UUID> sidePlayers = side == null ? Collections.<UUID>emptySet()
                 : presence.attackersBySide.getOrDefault(side, Collections.<UUID>emptySet());
         session.selector.update(core.ticks(), side, sidePlayers);
+
+        animate(session, record, status);
 
         int percent = (int) Math.floor(session.model.fraction() * 100.0);
         if (!session.startAlertSent && progressAllowed && attackers
@@ -237,6 +248,31 @@ public final class CaptureManager {
         session.updateBar(title(claim, session, status, progressAllowed), viewers(record));
     }
 
+    /**
+     * Flagpole animation, derived only from the authoritative capture fraction: the owner's
+     * banner descends to the midpoint, switches to the designated capturer's design, and the
+     * attacker's banner rises. Decay runs it backwards; contesting freezes it (no change).
+     */
+    private void animate(CaptureSession session, ClaimRecord record, CaptureModel.Status status) {
+        if (record.poleHeight <= 0 || !WarConfig.POLE_ANIMATED.get()) {
+            return;
+        }
+        if (status == CaptureModel.Status.DECAYING && !WarConfig.POLE_REVERSE_ON_DECAY.get()) {
+            return;
+        }
+        UUID capturer = session.selector.designated();
+        if (capturer != null) {
+            session.attackerDesign = core.flags().designFor(capturer);
+        }
+        FlagAnimation.Frame frame = FlagAnimation.frame(session.model.fraction(), WarConfig.POLE_MIDPOINT.get(),
+                record.poleHeight);
+        String design = record.designSnbt;
+        if (frame.attacker) {
+            design = session.attackerDesign != null ? session.attackerDesign : BannerDesigns.defaultSnbt();
+        }
+        core.flags().setVisual(record, frame.level, design);
+    }
+
     private CaptureSession open(ClaimRecord record, long windowId) {
         CaptureSession session = new CaptureSession(record.claimId, record.dimension, windowId,
                 WarConfig.CAPTURE_SECONDS.get() * 20L, WarConfig.DECAY_SECONDS.get() * 20L);
@@ -250,6 +286,10 @@ public final class CaptureManager {
             return;
         }
         session.close();
+        ClaimRecord visualRecord = record != null ? record : core.data().claim(claimId);
+        if (visualRecord != null) {
+            core.flags().clearVisual(visualRecord);
+        }
         if (reason == End.FAILED && claim != null && record != null) {
             creditDefense(session, claim, record);
         }
@@ -343,10 +383,16 @@ public final class CaptureManager {
         return had;
     }
 
+    /** Server stopping: end every session and put every animated banner back on top. */
     public void clearAll() {
         Iterator<CaptureSession> it = sessions.values().iterator();
         while (it.hasNext()) {
-            it.next().close();
+            CaptureSession session = it.next();
+            session.close();
+            ClaimRecord record = core.data().claim(session.claimId);
+            if (record != null) {
+                core.flags().clearVisual(record);
+            }
             it.remove();
         }
     }

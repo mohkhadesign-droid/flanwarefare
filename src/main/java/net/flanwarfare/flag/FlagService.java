@@ -16,9 +16,11 @@ import net.minecraft.block.FallingBlock;
 import net.minecraft.entity.item.ItemEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.item.BannerItem;
+import net.minecraft.item.BlockItem;
 import net.minecraft.item.DyeColor;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Direction;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
@@ -28,6 +30,7 @@ import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -35,24 +38,39 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Flag placement, relocation, appearance, protection index and automatic restoration.
+ * Flag placement, relocation, appearance, capture animation, protection index and automatic
+ * restoration. Geometry is described by {@link FlagStructure}; the base is always the record's
+ * flag position and the capture-zone centre.
  *
- * <p>Geometry of a flag at position P (the block the owner stood in):
+ * <p>Protection roles:
  * <ul>
- *   <li>FLAG: P, a standing vanilla banner.</li>
- *   <li>SUPPORT: the block under P. Cannot be broken, exploded or pushed.</li>
- *   <li>POCKET: the 3x3x2 space around P (excluding P). Must be free of collision when placed
- *   and nobody may place blocks into it afterwards, so the flag can always be reached by
- *   breaking ordinary blocks further out during a raid.</li>
+ *   <li>FLAG: every pole block and every position the banner can hang at. Cannot be broken,
+ *   replaced, exploded, pushed, or built into.</li>
+ *   <li>SUPPORT: the block under the base. Cannot be broken, exploded or pushed.</li>
+ *   <li>POCKET: the 3x3x2 space around the base. Must be clear when placed and nobody may place
+ *   blocks into it afterwards, so the flag can always be reached by breaking ordinary blocks
+ *   further out during a raid.</li>
  * </ul>
  */
 public final class FlagService {
 
     public enum Role { NONE, FLAG, SUPPORT, POCKET }
 
+    /** What the banner currently shows while a capture animates it. */
+    private static final class Visual {
+        final int level;
+        final String design;
+
+        Visual(int level, String design) {
+            this.level = level;
+            this.design = design;
+        }
+    }
+
     private final WarCore core;
     private final Map<String, Map<Long, Role>> roleIndex = new HashMap<>();
     private final Map<String, Map<Long, UUID>> flagIndex = new HashMap<>();
+    private final Map<UUID, Visual> visuals = new HashMap<>();
 
     public FlagService(WarCore core) {
         this.core = core;
@@ -70,18 +88,29 @@ public final class FlagService {
             if (!record.hasFlag) {
                 continue;
             }
-            BlockPos flag = record.flagPos();
+            FlagStructure s = FlagStructure.of(record);
             Map<Long, Role> roles = roleIndex.computeIfAbsent(record.dimension, d -> new HashMap<>());
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     for (int dy = 0; dy <= 1; dy++) {
-                        roles.putIfAbsent(flag.add(dx, dy, dz).toLong(), Role.POCKET);
+                        roles.putIfAbsent(s.base.add(dx, dy, dz).toLong(), Role.POCKET);
                     }
                 }
             }
-            roles.put(flag.toLong(), Role.FLAG);
-            roles.put(flag.down().toLong(), Role.SUPPORT);
-            flagIndex.computeIfAbsent(record.dimension, d -> new HashMap<>()).put(flag.toLong(), record.claimId);
+            for (BlockPos pos : s.allBlocks()) {
+                roles.put(pos.toLong(), Role.FLAG);
+            }
+            roles.put(s.support().toLong(), Role.SUPPORT);
+            flagIndex.computeIfAbsent(record.dimension, d -> new HashMap<>()).put(s.base.toLong(), record.claimId);
+        }
+    }
+
+    /** Called once at startup: every flag's appearance is re-applied when its chunk is loaded. */
+    public void refreshAllOnLoad() {
+        for (ClaimRecord record : core.data().claims().values()) {
+            if (record.hasFlag) {
+                record.designPending = true;
+            }
         }
     }
 
@@ -109,10 +138,28 @@ public final class FlagService {
 
     // ------------------------------------------------------------------ commands
 
+    /** The structure a new or moved flag at the player's feet would get, per configuration. */
+    private static FlagStructure plannedFor(ServerPlayerEntity player) {
+        BlockPos base = player.getPosition();
+        if (!WarConfig.POLE_ENABLED.get()) {
+            return FlagStructure.planned(base, 0, Direction.NORTH, null);
+        }
+        Block pole = FlagStructure.resolvePoleBlock(WarConfig.POLE_BLOCK.get());
+        return FlagStructure.planned(base, WarConfig.POLE_HEIGHT.get(), player.getHorizontalFacing(),
+                pole.getRegistryName().toString());
+    }
+
+    private static void applyStructure(ClaimRecord record, FlagStructure s, int rotation) {
+        record.setFlagPos(s.base);
+        record.flagRotation = rotation;
+        record.poleHeight = s.height;
+        record.poleSide = s.side.getIndex();
+        record.poleBlock = s.poleBlockId;
+    }
+
     /** /flag place: registers the flag of the owner's pending claim and activates it. */
     public int place(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
-        BlockPos pos = player.getPosition();
         Claim claim = ownedParentHere(player);
         if (claim == null) {
             return 0;
@@ -122,16 +169,14 @@ public final class FlagService {
             Msg.send(player, Msg.error("This claim already has a flag. Use /flag move to relocate it."));
             return 0;
         }
-        String problem = validate(world, pos, claim, record);
+        FlagStructure planned = plannedFor(player);
+        String problem = validate(world, planned, claim, record);
         if (problem != null) {
             Msg.send(player, Msg.error(problem));
             return 0;
         }
-        String design = designFor(player.getUniqueID());
-        int rotation = rotationOf(player);
-        record.setFlagPos(pos);
-        record.flagRotation = rotation;
-        record.designSnbt = design;
+        applyStructure(record, planned, rotationOf(player));
+        record.designSnbt = designFor(player.getUniqueID());
         record.flagEverPlaced = true;
         record.flagPlacedAt = System.currentTimeMillis();
         record.state = ClaimState.ACTIVE;
@@ -140,9 +185,10 @@ public final class FlagService {
         rebuildIndex();
         core.data().markDirty();
         core.saveNow();
-        BannerDesigns.place(world, pos, BannerDesigns.fromSnbt(design), rotation);
+        build(world, record);
+        moveOffPole(player, planned);
         core.audit("Flag placed for claim {} by {} at {} {}", record.claimId, player.getGameProfile().getName(),
-                record.dimension, pos);
+                record.dimension, planned.base);
         Msg.send(player, Msg.ok("Flag placed. Your claim is now ACTIVE: protection and claim management are enabled."));
         return 1;
     }
@@ -150,7 +196,6 @@ public final class FlagService {
     /** /flag move: instant, crash-safe relocation within the same claim, never during raids. */
     public int move(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
-        BlockPos pos = player.getPosition();
         Claim claim = ownedParentHere(player);
         if (claim == null) {
             return 0;
@@ -174,48 +219,69 @@ public final class FlagService {
             Msg.send(player, Msg.error("You can move this flag again in " + Msg.duration(cooldown - since) + "."));
             return 0;
         }
-        if (pos.equals(record.flagPos())) {
+        FlagStructure planned = plannedFor(player);
+        if (planned.base.equals(record.flagPos())) {
             Msg.send(player, Msg.error("The flag is already here."));
             return 0;
         }
-        String problem = validate(world, pos, claim, record);
+        String problem = validate(world, planned, claim, record);
         if (problem != null) {
             Msg.send(player, Msg.error(problem));
             return 0;
         }
-        relocate(world, record, pos, rotationOf(player));
+        relocate(world, record, planned, rotationOf(player));
         record.lastMovedAt = System.currentTimeMillis();
         core.data().markDirty();
         core.saveNow();
-        core.audit("Flag of claim {} moved by owner to {}", record.claimId, pos);
+        moveOffPole(player, planned);
+        core.audit("Flag of claim {} moved by owner to {}", record.claimId, planned.base);
         Msg.send(player, Msg.ok("Flag moved."));
         return 1;
     }
 
     /**
-     * Crash-safe relocation: (1) the old position is queued as an orphan and the new position
-     * recorded, then saved; (2) the new banner is placed; (3) the old banner is removed and the
-     * orphan entry dropped. After a crash at any point the restore loop places the banner at the
-     * recorded position and the orphan list removes the old one: never two flags, never none.
+     * Crash-safe relocation: (1) the old structure is queued as an orphan and the new one
+     * recorded, then saved; (2) the new structure is built; (3) the old one is removed and the
+     * orphan entry dropped. After a crash at any point the restore loop builds the recorded
+     * structure and the orphan list removes the old one: never two flags, never none.
      */
-    void relocate(ServerWorld world, ClaimRecord record, BlockPos to, int rotation) {
-        BlockPos from = record.flagPos();
+    void relocate(ServerWorld world, ClaimRecord record, FlagStructure to, int rotation) {
+        FlagStructure from = record.hasFlag ? FlagStructure.of(record) : null;
         OrphanFlag orphan = null;
         if (from != null) {
-            orphan = new OrphanFlag(record.dimension, from.getX(), from.getY(), from.getZ());
+            orphan = orphanOf(record.dimension, from);
             core.data().orphanFlags().add(orphan);
         }
-        record.setFlagPos(to);
-        record.flagRotation = rotation;
+        visuals.remove(record.claimId);
+        applyStructure(record, to, rotation);
         rebuildIndex();
         core.data().markDirty();
         core.saveNow();
-        BannerDesigns.place(world, to, BannerDesigns.fromSnbt(record.designSnbt), rotation);
-        if (from != null && world.isBlockLoaded(from) && world.getBlockState(from).getBlock() instanceof BannerBlock) {
-            world.setBlockState(from, Blocks.AIR.getDefaultState(), 3);
-        }
-        if (orphan != null && (from == null || world.isBlockLoaded(from))) {
+        build(world, record);
+        if (from != null && world.isBlockLoaded(from.base)) {
+            removeStructure(world, from);
             core.data().orphanFlags().remove(orphan);
+        }
+    }
+
+    private static OrphanFlag orphanOf(String dimension, FlagStructure s) {
+        OrphanFlag orphan = new OrphanFlag(dimension, s.base.getX(), s.base.getY(), s.base.getZ());
+        orphan.poleHeight = s.height;
+        orphan.poleSide = s.side.getIndex();
+        orphan.poleBlock = s.poleBlockId;
+        return orphan;
+    }
+
+    /** Players standing in the new pole are moved to the free spot opposite the banner. */
+    private static void moveOffPole(ServerPlayerEntity player, FlagStructure s) {
+        if (!s.isPole()) {
+            return;
+        }
+        AxisAlignedBB column = new AxisAlignedBB(s.base).expand(0, s.height, 0);
+        if (player.getBoundingBox().intersects(column)) {
+            BlockPos spot = s.standingSpot();
+            player.connection.setPlayerLocation(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5,
+                    player.rotationYaw, player.rotationPitch);
         }
     }
 
@@ -248,6 +314,10 @@ public final class FlagService {
         }
         record.designSnbt = designFor(player.getUniqueID());
         core.data().markDirty();
+        if (visuals.containsKey(record.claimId)) {
+            Msg.send(player, Msg.ok("Design saved for this flag. It will show once the current capture attempt ends."));
+            return 1;
+        }
         showDesign(record);
         Msg.send(player, Msg.ok("Flag design updated."));
         return 1;
@@ -288,24 +358,42 @@ public final class FlagService {
         return MathHelper.floor((180.0F + player.rotationYaw) * 16.0F / 360.0F + 0.5D) & 15;
     }
 
-    /** Returns null if the position is acceptable, otherwise a reason for the player. */
-    public String validate(ServerWorld world, BlockPos pos, Claim claim, ClaimRecord self) {
+    private static boolean isAir(ServerWorld world, BlockPos pos) {
+        return world.getBlockState(pos).isAir() && world.getFluidState(pos).isEmpty();
+    }
+
+    /** Returns null if the structure can be built here, otherwise a reason for the player. */
+    public String validate(ServerWorld world, FlagStructure s, Claim claim, ClaimRecord self) {
+        BlockPos pos = s.base;
         if (!claim.insideClaim(pos)) {
             return "The flag must be inside the claim.";
         }
-        if (pos.getY() < 1 || pos.getY() > 253) {
+        if (pos.getY() < 1 || pos.getY() + Math.max(1, s.height) > 254) {
             return "That height is not allowed for a flag.";
         }
-        if (!world.getBlockState(pos).isAir() || !world.getBlockState(pos.up()).isAir()) {
+        if (!isAir(world, pos) || !isAir(world, pos.up())) {
             return "Stand in open air: no blocks, plants, snow layers or fluids where the flag would go.";
         }
-        BlockState banner = BannerBlock.forColor(DyeColor.WHITE).getDefaultState();
-        if (!banner.isValidPosition(world, pos)) {
-            return "Stand on a solid block so the banner has support.";
+        for (BlockPos p : s.poleBlocks()) {
+            if (!isAir(world, p)) {
+                return "Not enough open space above you: the flagpole needs " + (s.height + 1)
+                        + " free blocks straight up. No blocks are replaced to make room.";
+            }
         }
-        BlockPos below = pos.down();
-        BlockState support = world.getBlockState(below);
-        if (support.getBlock() instanceof FallingBlock) {
+        if (s.isPole()) {
+            for (BlockPos p : s.bannerSlots()) {
+                if (!isAir(world, p) || !claim.insideClaim(p)) {
+                    return "The banner needs open space on the side you are facing, " + s.height
+                            + " blocks up from the ground, inside the claim. Turn to face open space.";
+                }
+            }
+        }
+        BlockState standing = BannerBlock.forColor(DyeColor.WHITE).getDefaultState();
+        if (!standing.isValidPosition(world, pos)) {
+            return "Stand on a solid block so the flag has support.";
+        }
+        BlockPos below = s.support();
+        if (world.getBlockState(below).getBlock() instanceof FallingBlock) {
             return "The flag cannot stand on sand, gravel or other falling blocks.";
         }
         if (world.getTileEntity(below) != null) {
@@ -333,6 +421,12 @@ public final class FlagService {
                 }
             }
         }
+        java.util.Set<Long> own = self.hasFlag ? footprint(FlagStructure.of(self)) : Collections.<Long>emptySet();
+        for (Long p : footprint(s)) {
+            if (roleAt(world, BlockPos.fromLong(p)) != Role.NONE && !own.contains(p)) {
+                return "Too close to another flag.";
+            }
+        }
         int min = WarConfig.MIN_FLAG_DISTANCE.get();
         String dim = FlanBridge.dimensionId(world);
         for (ClaimRecord other : core.data().claims().values()) {
@@ -346,25 +440,114 @@ public final class FlagService {
         return null;
     }
 
-    /** Shows the record's stored design on the banner now, or when its chunk next loads. */
+    // ------------------------------------------------------------------ building and appearance
+
+    /** Builds the whole structure (pole, support if missing, banner at the current level). */
+    private void build(ServerWorld world, ClaimRecord record) {
+        FlagStructure s = FlagStructure.of(record);
+        BlockState pole = s.poleBlock().getDefaultState();
+        for (BlockPos p : s.poleBlocks()) {
+            world.setBlockState(p, pole, 3);
+        }
+        applyCurrent(world, record);
+    }
+
+    /** Expected banner level and design right now (animation override, else raised owner flag). */
+    private Visual expected(ClaimRecord record) {
+        Visual visual = visuals.get(record.claimId);
+        if (visual != null) {
+            return visual;
+        }
+        return new Visual(FlagStructure.of(record).topLevel(), record.designSnbt);
+    }
+
+    /** Puts the banner where it should be, with the right design; clears other banner slots. */
+    private void applyCurrent(ServerWorld world, ClaimRecord record) {
+        FlagStructure s = FlagStructure.of(record);
+        Visual visual = expected(record);
+        ItemStack design = BannerDesigns.fromSnbt(visual.design);
+        BlockPos target = s.bannerAt(visual.level);
+        for (BlockPos slot : s.bannerSlots()) {
+            if (!slot.equals(target) && FlagStructure.isBanner(world.getBlockState(slot))) {
+                world.setBlockState(slot, Blocks.AIR.getDefaultState(), 3);
+            }
+        }
+        BlockState current = world.getBlockState(target);
+        if (s.isPole()) {
+            BlockState wanted = BannerDesigns.wallState(design, s.side);
+            if (current.getBlock() == wanted.getBlock()) {
+                BannerDesigns.writePatterns(world, target, design);
+            } else {
+                BannerDesigns.placeWall(world, target, design, s.side);
+            }
+        } else if (current.getBlock() instanceof BannerBlock && current.getBlock() == BannerBlock.forColor(BannerDesigns.color(design))) {
+            BannerDesigns.writePatterns(world, target, design);
+        } else {
+            BannerDesigns.place(world, target, design, record.flagRotation);
+        }
+        removeDrops(world, s);
+        record.designPending = false;
+        core.data().markDirty();
+    }
+
+    /** Shows the record's stored design, fully raised (ends any animation override). */
     public void showDesign(ClaimRecord record) {
+        visuals.remove(record.claimId);
         ServerWorld world = FlanBridge.world(core.server(), record.dimension);
-        BlockPos pos = record.flagPos();
-        if (world == null || pos == null || !world.isBlockLoaded(pos)) {
+        if (world == null || !record.hasFlag || !world.isBlockLoaded(record.flagPos())) {
             record.designPending = true;
             core.data().markDirty();
             return;
         }
-        ItemStack design = BannerDesigns.fromSnbt(record.designSnbt);
-        BlockState state = world.getBlockState(pos);
-        if (state.getBlock() instanceof BannerBlock && state.getBlock() == BannerBlock.forColor(BannerDesigns.color(design))) {
-            BannerDesigns.writePatterns(world, pos, design);
-        } else {
-            BannerDesigns.place(world, pos, design, record.flagRotation);
+        applyCurrent(world, record);
+    }
+
+    /**
+     * Capture animation: shows {@code design} at {@code level}. Only changes blocks when the
+     * frame actually changes, so a frozen (contested) capture sends no block updates.
+     */
+    public void setVisual(ClaimRecord record, int level, String design) {
+        if (!record.hasFlag || record.poleHeight <= 0) {
+            return;
         }
-        removeDroppedBanners(world, pos);
-        record.designPending = false;
-        core.data().markDirty();
+        Visual old = visuals.get(record.claimId);
+        if (old != null && old.level == level && old.design.equals(design)) {
+            return;
+        }
+        visuals.put(record.claimId, new Visual(level, design));
+        ServerWorld world = FlanBridge.world(core.server(), record.dimension);
+        if (world != null && world.isBlockLoaded(record.flagPos())) {
+            applyCurrent(world, record);
+        }
+    }
+
+    /** Ends the animation: the current owner's banner returns to the top. */
+    public void clearVisual(ClaimRecord record) {
+        if (visuals.containsKey(record.claimId)) {
+            showDesign(record);
+        }
+    }
+
+    public boolean isAnimating(UUID claimId) {
+        return visuals.containsKey(claimId);
+    }
+
+    /** Removes a structure's own blocks (pole blocks of its type, banners) without drops. */
+    private void removeStructure(ServerWorld world, FlagStructure s) {
+        for (BlockPos p : s.bannerSlots()) {
+            if (FlagStructure.isBanner(world.getBlockState(p)) && !belongsToLiveFlag(world, p)) {
+                world.setBlockState(p, Blocks.AIR.getDefaultState(), 3);
+            }
+        }
+        for (BlockPos p : s.poleBlocks()) {
+            if (s.isPoleBlock(world.getBlockState(p)) && !belongsToLiveFlag(world, p)) {
+                world.setBlockState(p, Blocks.AIR.getDefaultState(), 3);
+            }
+        }
+    }
+
+    private boolean belongsToLiveFlag(World world, BlockPos pos) {
+        return roleAt(world, pos) == Role.FLAG;
     }
 
     /** Removes the flag of a claim that no longer exists (now, or once its chunk is loaded). */
@@ -372,16 +555,15 @@ public final class FlagService {
         if (!record.hasFlag) {
             return;
         }
-        BlockPos pos = record.flagPos();
+        FlagStructure s = FlagStructure.of(record);
         ServerWorld world = FlanBridge.world(core.server(), record.dimension);
         record.hasFlag = false;
+        visuals.remove(record.claimId);
         rebuildIndex();
-        if (world != null && world.isBlockLoaded(pos)) {
-            if (world.getBlockState(pos).getBlock() instanceof BannerBlock) {
-                world.setBlockState(pos, Blocks.AIR.getDefaultState(), 3);
-            }
+        if (world != null && world.isBlockLoaded(s.base)) {
+            removeStructure(world, s);
         } else {
-            core.data().orphanFlags().add(new OrphanFlag(record.dimension, pos.getX(), pos.getY(), pos.getZ()));
+            core.data().orphanFlags().add(orphanOf(record.dimension, s));
         }
         core.data().markDirty();
     }
@@ -398,60 +580,87 @@ public final class FlagService {
                 continue;
             }
             ServerWorld world = FlanBridge.world(core.server(), record.dimension);
-            BlockPos pos = record.flagPos();
-            if (world == null || !world.isBlockLoaded(pos)) {
+            if (world == null || !world.isBlockLoaded(record.flagPos())) {
                 continue;
             }
-            if (!(world.getBlockState(pos).getBlock() instanceof BannerBlock)) {
+            if (!intact(world, record)) {
                 restore(world, record, false);
             } else if (record.designPending) {
-                showDesign(record);
+                applyCurrent(world, record);
             }
         }
         removeLoadedOrphans();
     }
 
-    /** Re-creates a missing banner. Returns null on success, otherwise the reason. */
-    public String restore(ServerWorld world, ClaimRecord record, boolean byAdmin) {
-        BlockPos pos = record.flagPos();
-        String failure = null;
-        BlockState here = world.getBlockState(pos);
-        boolean replaceable = here.isAir() || here.getMaterial().isReplaceable() || !world.getFluidState(pos).isEmpty();
-        if (here.getBlock() instanceof BannerBlock) {
-            replaceable = true;
+    /** True if every pole block is in place and the banner is at its expected slot. */
+    public boolean intact(ServerWorld world, ClaimRecord record) {
+        FlagStructure s = FlagStructure.of(record);
+        for (BlockPos p : s.poleBlocks()) {
+            if (!s.isPoleBlock(world.getBlockState(p))) {
+                return false;
+            }
         }
-        if (!replaceable) {
-            failure = "flag position is occupied by " + here.getBlock().getRegistryName();
-        } else {
-            ItemStack design = BannerDesigns.fromSnbt(record.designSnbt);
-            BlockState bannerState = BannerDesigns.standingState(design, record.flagRotation);
-            if (!bannerState.isValidPosition(world, pos)) {
-                BlockState below = world.getBlockState(pos.down());
-                boolean belowReplaceable = below.isAir() || below.getMaterial().isReplaceable()
-                        || !world.getFluidState(pos.down()).isEmpty();
-                if (belowReplaceable) {
-                    world.setBlockState(pos.down(), supportBlock().getDefaultState(), 3);
-                } else {
-                    failure = "support block under the flag is unsuitable: " + below.getBlock().getRegistryName();
+        BlockPos target = s.bannerAt(expected(record).level);
+        for (BlockPos slot : s.bannerSlots()) {
+            boolean banner = FlagStructure.isBanner(world.getBlockState(slot));
+            if (slot.equals(target) != banner) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Re-creates missing parts of a flag. Returns null on success, otherwise the reason. */
+    public String restore(ServerWorld world, ClaimRecord record, boolean byAdmin) {
+        FlagStructure s = FlagStructure.of(record);
+        String failure = null;
+        BlockState pole = s.poleBlock().getDefaultState();
+        for (BlockPos p : s.poleBlocks()) {
+            BlockState here = world.getBlockState(p);
+            if (s.isPoleBlock(here)) {
+                continue;
+            }
+            if (replaceable(world, p, here)) {
+                world.setBlockState(p, pole, 3);
+            } else {
+                failure = "flagpole position " + p + " is occupied by " + here.getBlock().getRegistryName();
+                break;
+            }
+        }
+        if (failure == null) {
+            Visual visual = expected(record);
+            BlockPos target = s.bannerAt(visual.level);
+            BlockState here = world.getBlockState(target);
+            if (!FlagStructure.isBanner(here) && !replaceable(world, target, here)) {
+                failure = "banner position is occupied by " + here.getBlock().getRegistryName();
+            } else if (!s.isPole()) {
+                BlockState standing = BannerDesigns.standingState(BannerDesigns.fromSnbt(visual.design), record.flagRotation);
+                if (!standing.isValidPosition(world, target)) {
+                    BlockState below = world.getBlockState(s.support());
+                    if (replaceable(world, s.support(), below)) {
+                        world.setBlockState(s.support(), supportBlock().getDefaultState(), 3);
+                    } else {
+                        failure = "support block under the flag is unsuitable: " + below.getBlock().getRegistryName();
+                    }
                 }
+            } else if (replaceable(world, s.support(), world.getBlockState(s.support()))) {
+                world.setBlockState(s.support(), supportBlock().getDefaultState(), 3);
             }
             if (failure == null) {
-                if (!world.getFluidState(pos).isEmpty() || !here.isAir()) {
-                    world.setBlockState(pos, Blocks.AIR.getDefaultState(), 3);
+                if (!FlagStructure.isBanner(here) && !here.isAir()) {
+                    world.setBlockState(target, Blocks.AIR.getDefaultState(), 3);
                 }
-                BannerDesigns.place(world, pos, design, record.flagRotation);
-                removeDroppedBanners(world, pos);
+                applyCurrent(world, record);
             }
         }
         if (failure == null) {
             record.restoreFailures = 0;
-            record.designPending = false;
             if (record.state == ClaimState.RECOVERY_REQUIRED && byAdmin) {
                 record.state = ClaimState.ACTIVE;
                 record.recoveryReason = null;
             }
             core.data().markDirty();
-            core.audit("Flag of claim {} restored at {} {}", record.claimId, record.dimension, pos);
+            core.audit("Flag of claim {} restored at {} {}", record.claimId, record.dimension, s.base);
             return null;
         }
         record.restoreFailures++;
@@ -466,18 +675,32 @@ public final class FlagService {
         return failure;
     }
 
+    private static boolean replaceable(ServerWorld world, BlockPos pos, BlockState state) {
+        return state.isAir() || state.getMaterial().isReplaceable() || !world.getFluidState(pos).isEmpty();
+    }
+
     private Block supportBlock() {
         Block block = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(WarConfig.RESTORE_SUPPORT_BLOCK.get()));
         return block == null || block == Blocks.AIR ? Blocks.COBBLESTONE : block;
     }
 
     /**
-     * When something destroyed a flag and dropped a banner item, the restored flag would
-     * otherwise duplicate it. Removes fresh banner item drops right next to the flag.
+     * When something destroyed part of a flag and dropped its item, the restored flag would
+     * otherwise duplicate it. Removes fresh banner and pole-block drops around the structure.
      */
-    private static void removeDroppedBanners(ServerWorld world, BlockPos pos) {
-        List<ItemEntity> drops = world.getEntitiesWithinAABB(ItemEntity.class, new AxisAlignedBB(pos).grow(2.0D),
-                item -> item.getItem().getItem() instanceof BannerItem && item.ticksExisted < 400);
+    private static void removeDrops(ServerWorld world, FlagStructure s) {
+        Block pole = s.isPole() ? s.poleBlock() : null;
+        AxisAlignedBB area = new AxisAlignedBB(s.base).grow(2.0D).expand(0, Math.max(0, s.height), 0);
+        List<ItemEntity> drops = world.getEntitiesWithinAABB(ItemEntity.class, area, item -> {
+            if (item.ticksExisted >= 400) {
+                return false;
+            }
+            ItemStack stack = item.getItem();
+            if (stack.getItem() instanceof BannerItem) {
+                return true;
+            }
+            return pole != null && stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock() == pole;
+        });
         for (ItemEntity drop : drops) {
             drop.remove();
         }
@@ -493,13 +716,11 @@ public final class FlagService {
                 core.data().markDirty();
                 continue;
             }
-            BlockPos pos = new BlockPos(orphan.x, orphan.y, orphan.z);
-            if (!world.isBlockLoaded(pos)) {
+            FlagStructure s = FlagStructure.of(orphan);
+            if (!world.isBlockLoaded(s.base)) {
                 continue;
             }
-            if (claimOfFlagAt(orphan.dimension, pos) == null && world.getBlockState(pos).getBlock() instanceof BannerBlock) {
-                world.setBlockState(pos, Blocks.AIR.getDefaultState(), 3);
-            }
+            removeStructure(world, s);
             it.remove();
             core.data().markDirty();
         }
@@ -507,21 +728,22 @@ public final class FlagService {
 
     // ------------------------------------------------------------------ admin
 
-    /** Places a flag at the admin's position, activating a pending claim if necessary. */
+    /** Builds a flag at the admin's position, activating a pending claim if necessary. */
     public String adminRelocate(ClaimRecord record, Claim claim, ServerPlayerEntity admin) {
         ServerWorld world = admin.getServerWorld();
-        BlockPos pos = admin.getPosition();
         if (!FlanBridge.dimensionId(world).equals(record.dimension)) {
             return "You are not in the claim's dimension.";
         }
-        String problem = validate(world, pos, claim, record);
+        FlagStructure planned = plannedFor(admin);
+        String problem = validate(world, planned, claim, record);
         if (problem != null) {
             return problem;
         }
         if (record.designSnbt == null) {
             record.designSnbt = designFor(record.owner);
         }
-        relocate(world, record, pos, rotationOf(admin));
+        relocate(world, record, planned, rotationOf(admin));
+        moveOffPole(admin, planned);
         record.flagEverPlaced = true;
         if (record.flagPlacedAt == 0) {
             record.flagPlacedAt = System.currentTimeMillis();
@@ -531,7 +753,35 @@ public final class FlagService {
         record.restoreFailures = 0;
         core.data().markDirty();
         core.saveNow();
-        core.audit("Admin {} relocated flag of claim {} to {}", admin.getGameProfile().getName(), record.claimId, pos);
+        core.audit("Admin {} relocated flag of claim {} to {}", admin.getGameProfile().getName(), record.claimId, planned.base);
         return null;
+    }
+
+    /** Short description of a flag's structure for /flag info and admin inspect. */
+    public static String describe(ClaimRecord record) {
+        if (!record.hasFlag) {
+            return "no flag";
+        }
+        String base = record.flagX + ", " + record.flagY + ", " + record.flagZ;
+        return record.poleHeight > 0
+                ? "flagpole at " + base + " (banner up to " + record.poleHeight + " blocks high)"
+                : "banner at " + base;
+    }
+
+    /** Every position a structure protects: its blocks, support and the pocket. */
+    private static java.util.Set<Long> footprint(FlagStructure s) {
+        java.util.Set<Long> set = new java.util.HashSet<>();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int dy = 0; dy <= 1; dy++) {
+                    set.add(s.base.add(dx, dy, dz).toLong());
+                }
+            }
+        }
+        for (BlockPos pos : s.allBlocks()) {
+            set.add(pos.toLong());
+        }
+        set.add(s.support().toLong());
+        return set;
     }
 }

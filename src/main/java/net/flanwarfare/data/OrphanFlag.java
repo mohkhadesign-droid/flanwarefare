@@ -6,6 +6,10 @@ public final class OrphanFlag {
     public int x;
     public int y;
     public int z;
+    /** Structure of the removed flag: 0 = single banner, otherwise a flagpole. */
+    public int poleHeight;
+    public int poleSide;
+    public String poleBlock;
 
     public OrphanFlag() {
     }

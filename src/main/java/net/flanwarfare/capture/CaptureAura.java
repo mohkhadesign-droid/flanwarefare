@@ -20,9 +20,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Visible capture zone: a ring of vanilla dust particles on the zone boundary, at the flag's
- * base height. Particles are sent per player, only to players within the visibility distance
- * of that flag, so nothing is broadcast server-wide and no chunk is ever loaded (a player
+ * Visible capture zone: a ring of vanilla dust particles on the zone boundary, at the flagpole
+ * base's height. Every player within the visibility distance receives it, whatever their
+ * relation to the claim (owner, defender, raider, neutral). Particles are sent per player, so
+ * nothing is broadcast server-wide and no chunk is ever loaded (a player
  * being nearby means the chunk is loaded already). The ring uses exactly the configured
  * {@code capture.radius_blocks} and {@link CaptureZone}, the same as capture detection.
  *
@@ -73,7 +74,9 @@ public final class CaptureAura {
                 }
                 CaptureModel.Status status = core.capture().statusOf(record.claimId);
                 long immunity = record.immunityRemaining(System.currentTimeMillis());
-                String color = immunity > 0 ? WarConfig.AURA_IMMUNE_COLOR.get() : colorFor(status);
+                String color = immunity > 0
+                        ? (WarConfig.AURA_SHOW_IMMUNE.get() ? WarConfig.AURA_IMMUNE_COLOR.get() : null)
+                        : colorFor(status);
                 if (color != null) {
                     drawRing(world, viewers, record, radius, color);
                 }
@@ -105,7 +108,8 @@ public final class CaptureAura {
         for (int i = 0; i < points; i++) {
             double[] p = CaptureZone.ringPoint(record.flagX, record.flagZ, radius, i, points);
             for (ServerPlayerEntity viewer : viewers) {
-                world.spawnParticle(viewer, dust, false, p[0], y, p[1], 1, 0.0, 0.0, 0.0, 0.0);
+                // longDistance=true: clients normally cull particles beyond 32 blocks.
+                world.spawnParticle(viewer, dust, true, p[0], y, p[1], 1, 0.0, 0.0, 0.0, 0.0);
             }
         }
     }
@@ -115,7 +119,7 @@ public final class CaptureAura {
                                       CaptureModel.Status status, long immunity) {
         for (ServerPlayerEntity player : viewers) {
             if (!CaptureManager.canTakePart(player)
-                    || !CaptureZone.withinHeight(player.getPosY(), record.flagY, radius)) {
+                    || !CaptureZone.withinHeight(player.getPosY(), record.flagY, WarConfig.VERTICAL_TOLERANCE.get())) {
                 continue;
             }
             double distance = CaptureZone.horizontalDistance(player.getPosX(), player.getPosZ(), record.flagX, record.flagZ);
@@ -146,8 +150,8 @@ public final class CaptureAura {
         double viewSq = Math.pow(WarConfig.AURA_DISTANCE.get(), 2);
         for (ServerPlayerEntity player : world.getPlayers()) {
             if (player.getDistanceSq(record.flagX + 0.5, record.flagY, record.flagZ + 0.5) <= viewSq) {
-                world.spawnParticle(player, ParticleTypes.TOTEM_OF_UNDYING, false,
-                        record.flagX + 0.5, record.flagY + 1.0, record.flagZ + 0.5, 80, 0.6, 0.8, 0.6, 0.4);
+                world.spawnParticle(player, ParticleTypes.TOTEM_OF_UNDYING, true,
+                        record.flagX + 0.5, record.flagY + 1.0 + record.poleHeight, record.flagZ + 0.5, 80, 0.6, 0.8, 0.6, 0.4);
             }
         }
     }

@@ -392,64 +392,206 @@ public final class WarStats {
         return archive;
     }
 
-    // ------------------------------------------------------------------ reconciliation
+    // ------------------------------------------------------------------ integrity
 
-    /** Checks statistics against Flan and the journal; removes exact duplicate events. */
-    public List<String> reconcile() {
-        List<String> report = new ArrayList<>();
+    /** Result of a read-only integrity check. */
+    public static final class Report {
+        public final List<String> summary = new ArrayList<>();
+        public final List<String> warnings = new ArrayList<>();
+        public final List<String> notes = new ArrayList<>();
+    }
+
+    /**
+     * Read-only integrity check: never modifies anything. Compares statistics with Flan
+     * ownership, the conquest journal and the claim records.
+     */
+    public Report check() {
+        Report r = new Report();
+        long now = System.currentTimeMillis();
         Season season = season();
-        if (season == null) {
-            report.add("No active season: statistics are not being recorded.");
-            return report;
-        }
-        Set<String> seen = new HashSet<>();
-        int removed = 0;
-        Iterator<WarEvent> it = season.events.iterator();
-        while (it.hasNext()) {
-            WarEvent e = it.next();
-            if (e == null || e.id == null || !seen.add(e.id)) {
-                it.remove();
-                removed++;
+        List<WarEvent> events = events();
+        StatsAggregator stats = aggregate();
+
+        int conquests = 0;
+        int defenses = 0;
+        for (WarEvent e : events) {
+            if (WarEvent.CONQUEST.equals(e.type) && !e.reversed) {
+                conquests++;
+            } else if (WarEvent.DEFENSE.equals(e.type)) {
+                defenses++;
             }
         }
-        if (removed > 0) {
-            data().markDirty();
-            report.add("Removed " + removed + " duplicate or invalid event(s).");
+        int conqueredNow = 0;
+        for (StatsAggregator.Ownership o : ownership()) {
+            if (o.conquered) {
+                conqueredNow++;
+            }
         }
+        r.summary.add("Season: " + (season == null ? "none (not recording)"
+                : season.name + " [" + season.id + "]" + (season.isActive() ? "" : " (ended)")));
+        r.summary.add("Tracked Players: " + stats.players(StatRow.BY_CONQUESTS).size());
+        r.summary.add("Tracked Kingdoms: " + stats.kingdoms(StatRow.BY_CONQUESTS).size());
+        r.summary.add("Completed Conquests: " + conquests);
+        r.summary.add("Successful Defenses: " + defenses);
+        r.summary.add("Current Conquered Claims: " + conqueredNow);
+        r.summary.add("War Log Entries: " + events.size());
+
+        Set<String> ids = new HashSet<>();
+        Set<UUID> txns = new HashSet<>();
+        int duplicateIds = 0;
+        int duplicateConquests = 0;
+        int wrongSeason = 0;
+        int missingOwners = 0;
         int noKingdom = 0;
-        for (WarEvent e : season.events) {
-            if (WarEvent.CONQUEST.equals(e.type) && (e.actingKingdomId == null || e.previousKingdomId == null)) {
-                noKingdom++;
+        for (WarEvent e : events) {
+            if (e == null || e.id == null || !ids.add(e.id)) {
+                duplicateIds++;
+                continue;
+            }
+            if (season != null && !season.id.equals(e.seasonId)) {
+                wrongSeason++;
+            }
+            if (WarEvent.CONQUEST.equals(e.type)) {
+                if (e.txnId != null && !txns.add(e.txnId)) {
+                    duplicateConquests++;
+                }
+                if (e.newOwner == null || e.previousOwner == null) {
+                    missingOwners++;
+                }
+                if (e.actingKingdomId == null || e.previousKingdomId == null) {
+                    noKingdom++;
+                }
             }
         }
+        warn(r, duplicateIds, "duplicate or invalid event ID(s) (ignored by the leaderboard; repair removes them)");
+        warn(r, duplicateConquests, "conquest(s) recorded twice for the same transaction (repair keeps the first)");
+        warn(r, wrongSeason, "event(s) carry another season's ID (repair re-labels them)");
+        warn(r, missingOwners, "conquest event(s) without an owner reference");
         if (noKingdom > 0) {
-            report.add(noKingdom + " conquest(s) have no kingdom attribution (player had no kingdom or FTB Teams was unavailable).");
+            r.notes.add(noKingdom + " conquest(s) have no kingdom attribution (player had no party or FTB Teams was unavailable); "
+                    + "this is expected and never guessed.");
         }
+
+        int orphaned = 0;
+        int ownerMismatch = 0;
+        int badImmunity = 0;
+        java.util.Map<UUID, Integer> conqueredBy = new java.util.HashMap<>();
+        for (ClaimRecord record : data().claims().values()) {
+            Claim claim = FlanBridge.find(core.server(), record);
+            if (claim == null) {
+                orphaned++;
+                continue;
+            }
+            if (record.owner == null || !record.owner.equals(claim.getOwner())) {
+                ownerMismatch++;
+            }
+            if (record.conquered && !claim.isAdminClaim()) {
+                conqueredBy.merge(claim.getOwner(), 1, Integer::sum);
+            }
+            if (record.immuneUntil < 0 || record.immuneUntil > now + 366L * 86_400_000L) {
+                badImmunity++;
+            }
+        }
+        warn(r, orphaned, "claim record(s) whose Flan claim no longer exists (repair removes them and their flags)");
+        warn(r, ownerMismatch, "claim record(s) whose owner differs from Flan (repair re-syncs from Flan)");
+        warn(r, badImmunity, "invalid recapture-immunity timestamp(s) (repair clears them)");
+        int max = WarConfig.MAX_CONQUERED_PER_PLAYER.get();
+        if (max >= 0) {
+            for (java.util.Map.Entry<UUID, Integer> entry : conqueredBy.entrySet()) {
+                if (entry.getValue() > max) {
+                    r.notes.add(FlanBridge.playerName(core.server(), entry.getKey()) + " owns " + entry.getValue()
+                            + " conquered claims (limit " + max + "); allowed if the limit was lowered, no claims are removed.");
+                }
+            }
+        }
+
+        int incomplete = 0;
         int missingEvents = 0;
         for (ConquestTxn txn : data().transactions()) {
-            if (txn.phase == ConquestTxn.Phase.COMMITTED && txn.finishedAt >= season.startedAt
-                    && find(txn.txnId.toString()) == null) {
+            if (txn.phase == ConquestTxn.Phase.PENDING || txn.phase == ConquestTxn.Phase.NEEDS_ADMIN) {
+                incomplete++;
+            }
+            if (season != null && txn.phase == ConquestTxn.Phase.COMMITTED && txn.finishedAt >= season.startedAt
+                    && !txns.contains(txn.txnId)) {
                 missingEvents++;
             }
         }
+        warn(r, incomplete, "incomplete conquest transaction(s) (see /war admin status; fix with /war admin claim repair)");
         if (missingEvents > 0) {
-            report.add(missingEvents + " committed conquest(s) in this season have no statistics entry (e.g. recorded while "
-                    + "statistics were disabled). They are reported, not invented.");
+            r.notes.add(missingEvents + " committed conquest(s) this season have no statistics entry (e.g. made while statistics "
+                    + "were disabled). Reported only; history is never invented.");
         }
-        int mismatched = 0;
-        for (ClaimRecord record : data().claims().values()) {
-            Claim claim = FlanBridge.find(core.server(), record);
-            if (claim != null && !claim.getOwner().equals(record.owner)) {
-                mismatched++;
-                core.lifecycle().recordFor(claim);
+        r.summary.add("Statistics Integrity: " + (r.warnings.isEmpty() ? "OK" : r.warnings.size() + " WARNING(S)"));
+        return r;
+    }
+
+    private static void warn(Report r, int count, String text) {
+        if (count > 0) {
+            r.warnings.add(count + " " + text);
+        }
+    }
+
+    /** Applies the safe corrections reported by {@link #check()}. Returns what was changed. */
+    public List<String> repair(String adminName) {
+        List<String> done = new ArrayList<>();
+        Season season = season();
+        if (season != null) {
+            Set<String> ids = new HashSet<>();
+            Set<UUID> txns = new HashSet<>();
+            int removed = 0;
+            int relabeled = 0;
+            Iterator<WarEvent> it = season.events.iterator();
+            while (it.hasNext()) {
+                WarEvent e = it.next();
+                boolean duplicate = e == null || e.id == null || !ids.add(e.id)
+                        || (WarEvent.CONQUEST.equals(e.type) && e.txnId != null && !txns.add(e.txnId));
+                if (duplicate) {
+                    it.remove();
+                    removed++;
+                } else if (!season.id.equals(e.seasonId)) {
+                    e.seasonId = season.id;
+                    relabeled++;
+                }
+            }
+            if (removed > 0) {
+                done.add("Removed " + removed + " duplicate or invalid event(s).");
+            }
+            if (relabeled > 0) {
+                done.add("Re-labelled " + relabeled + " event(s) with the current season ID.");
             }
         }
-        if (mismatched > 0) {
-            report.add("Re-synced " + mismatched + " claim owner(s) from Flan.");
+        int resynced = 0;
+        int cleared = 0;
+        long now = System.currentTimeMillis();
+        for (ClaimRecord record : new ArrayList<>(data().claims().values())) {
+            Claim claim = FlanBridge.find(core.server(), record);
+            if (claim != null && (record.owner == null || !record.owner.equals(claim.getOwner()))) {
+                core.lifecycle().recordFor(claim);
+                resynced++;
+            }
+            if (record.immuneUntil < 0 || record.immuneUntil > now + 366L * 86_400_000L) {
+                record.immuneUntil = 0L;
+                cleared++;
+            }
         }
-        if (report.isEmpty()) {
-            report.add("Statistics are consistent: " + season.events.size() + " event(s) in season " + season.id + ".");
+        int before = data().claims().size();
+        core.lifecycle().reconcileAll();
+        int orphans = before - data().claims().size();
+        if (resynced > 0) {
+            done.add("Re-synced " + resynced + " claim owner(s) from Flan.");
         }
-        return report;
+        if (cleared > 0) {
+            done.add("Cleared " + cleared + " invalid immunity timestamp(s).");
+        }
+        if (orphans > 0) {
+            done.add("Removed " + orphans + " record(s) of deleted claims and their flags.");
+        }
+        if (done.isEmpty()) {
+            done.add("Nothing needed repairing.");
+        }
+        data().markDirty();
+        core.saveNow();
+        core.audit("Statistics repair by {}: {}", adminName, done);
+        return done;
     }
 }

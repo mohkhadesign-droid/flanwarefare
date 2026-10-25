@@ -23,6 +23,12 @@ public final class ClaimRecord {
     public int flagY;
     public int flagZ;
     public int flagRotation;
+    /** Flagpole: banner height above the base; 0 = legacy single standing banner at the base. */
+    public int poleHeight;
+    /** Flagpole: horizontal side of the pole the banner hangs on (Direction index 2..5). */
+    public int poleSide;
+    /** Flagpole: block id of the pole, as built (config changes do not alter existing poles). */
+    public String poleBlock;
     /** Design currently shown on the flag, as SNBT of a banner ItemStack. */
     public String designSnbt;
     /** The design changed while the flag's chunk was unloaded; apply when it loads. */

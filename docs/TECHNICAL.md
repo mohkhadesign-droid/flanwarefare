@@ -336,3 +336,105 @@ nothing is recorded, and `/war admin status` says so.
 - re-syncs claim owners from Flan;
 - reports conquests without kingdom attribution;
 - reports committed conquests that have no statistics entry. These are never invented.
+
+## 15. Flagpoles and the capture animation (feasibility)
+
+**What 1.16.5 allows server-side.** There are no display entities (they came in 1.19.4), and
+banner blocks exist only at whole-block positions. The options considered:
+
+| Option | Smooth? | Problems |
+|---|---|---|
+| **Wall banners stepping along a fence pole** (chosen) | Stepped | Plain blocks: persistent, protected by the same role index, restorable, with exact positions known server-side |
+| Invisible marker armour stand wearing the banner, teleported each tick | Yes (client interpolation) | An extra entity per flag, saved with chunks (orphans after crashes), killable with `/kill`. Head-slot banner positioning can't be checked without a client |
+| Client mod | Yes | Breaks the server-side-only requirement; not introduced |
+
+**Geometry** (`flag/FlagStructure`, height H from `flagpole.height_blocks`):
+
+- Pole blocks at B..B+H, where B is the base the player stood on.
+- A wall banner on side S, the direction the player faced, at levels 1..H.
+- `B.offset(S).up(level)` hangs on the pole block at the same height. Wall banners are valid on
+  any solid-material block, which fences, walls and iron bars all are.
+- Building only uses air blocks. Placement is rejected if the pole column or banner column
+  isn't empty or isn't in the claim, so nothing is ever overwritten.
+- The structure (height, side, block) is stored on the claim record, so config changes don't
+  alter existing poles. Records with `poleHeight = 0` are legacy single banners and keep working.
+
+**Protection.** Every pole block and every banner slot has role FLAG (unbreakable, can't be
+built into, exploded or pushed). The block under B is SUPPORT, and the 3x3x2 space around B is
+POCKET, as before. `/flag move` and admin relocation move the whole structure with the same
+crash-safe orphan procedure. The restore loop rebuilds missing pole blocks, puts the banner back
+at its expected level, removes stray banners from other slots, and deletes fresh banner or pole
+item drops so nothing can be duplicated.
+
+**Animation** (`logic/FlagAnimation`, tested). The frame is a pure function of the capture
+fraction, the midpoint and H:
+
+- below the midpoint: the owner's design, level = H − round(f/m·(H−1));
+- from the midpoint up: the designated capturer's design, level = 1 + round((f−m)/(1−m)·(H−1)).
+
+Blocks change only when the frame changes, so a contested capture sends no updates. Decay uses
+the same function, so it runs backwards automatically. The attacker design follows the current
+designated capturer. Ownership is never touched until 100%.
+
+When a session ends (failure, cancellation, conquest or server stop), the banner returns to the
+top with the current owner's design, which is the new owner's after a conquest. At startup every
+flag is marked for a refresh, so a crash mid-animation is corrected when the chunk loads.
+
+**Capture centre.** The capture centre is the ground-level base. The vertical tolerance (3 blocks
+by default) applies around the base, so the raised banner never moves the zone.
+
+## 16. Global capture time
+
+`/war admin capturetime <seconds>` writes `capture.duration_seconds` in the server config
+through Forge. That config value is the only stored copy: no runtime duplicate, it survives
+restarts, and the file and the command never disagree. `reset` writes the built-in default
+(90 s).
+
+Every capture evaluation compares the running session's durations with the config. On a
+difference, `CaptureModel.rescale` keeps the percentage, so the remaining time scales and the
+change can never complete a capture by itself (tested). The animation follows the percentage, so
+it stays in sync.
+
+## 17. Statistics check and repair
+
+`/war admin stats check` is read-only. Its summary covers the season, tracked players and
+kingdoms, completed conquests, defenses, current conquered claims and war-log entries.
+
+It warns about:
+
+- duplicate or invalid event IDs;
+- conquests recorded twice for one transaction;
+- events from another season;
+- conquest events without owners;
+- orphaned claim records;
+- owner mismatches with Flan;
+- invalid immunity timestamps;
+- incomplete conquest transactions.
+
+Its notes cover players above a lowered limit, conquests without kingdom attribution, and
+committed conquests missing from statistics. Those are reported, never invented.
+
+`/war admin stats check <player>` gives the per-player view with consistency checks against Flan
+accounting.
+
+`/war admin stats repair confirm` applies the safe fixes and audit-logs them:
+
+- remove duplicates;
+- re-label season IDs;
+- re-sync owners from Flan;
+- remove records of deleted claims;
+- clear invalid immunity.
+
+At startup only the read-only check runs, and its warnings go to the log.
+
+## 18. Kingdom identification
+
+Kingdoms come from FTB Teams parties (`team/SideResolver`), accessed by reflection under both
+known API package names. Flan trust is never used to infer kingdom membership; it only decides
+claim defenders, per `trusted_defenders`. Each event records the kingdom at that moment, while
+current territory uses the owner's present kingdom. Without a party, events count as individual
+achievements only.
+
+The installed FTB Teams JAR has not been inspected yet. Its exact API (`getPlayerTeam`, team
+`getId`, `getType`/`isPartyTeam`, display name) should be verified against it, the same way Flan
+was. `/war admin status` reports what was detected.

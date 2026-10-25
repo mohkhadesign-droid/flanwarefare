@@ -27,6 +27,9 @@ public final class WarConfig {
 
     public static final ForgeConfigSpec SPEC;
 
+    /** Default capture duration, used by /war admin capturetime reset. */
+    public static final int DEFAULT_CAPTURE_SECONDS = 90;
+
     // raid
     public static final ForgeConfigSpec.EnumValue<RaidMode> RAID_MODE;
     public static final ForgeConfigSpec.ConfigValue<String> RAID_START;
@@ -78,6 +81,7 @@ public final class WarConfig {
     // capture
     public static final ForgeConfigSpec.IntValue CAPTURE_SECONDS;
     public static final ForgeConfigSpec.DoubleValue CAPTURE_RADIUS;
+    public static final ForgeConfigSpec.DoubleValue VERTICAL_TOLERANCE;
     public static final ForgeConfigSpec.IntValue DECAY_SECONDS;
     public static final ForgeConfigSpec.BooleanValue CONTEST_BY_RIVALS;
     public static final ForgeConfigSpec.BooleanValue CREATIVE_CAN_CAPTURE;
@@ -99,6 +103,7 @@ public final class WarConfig {
     public static final ForgeConfigSpec.BooleanValue AURA_SHOW_IDLE;
     public static final ForgeConfigSpec.BooleanValue AURA_SHOW_ACTIVE;
     public static final ForgeConfigSpec.BooleanValue AURA_SHOW_CONTESTED;
+    public static final ForgeConfigSpec.BooleanValue AURA_SHOW_IMMUNE;
     public static final ForgeConfigSpec.BooleanValue AURA_SHOW_COMPLETION;
     public static final ForgeConfigSpec.BooleanValue AURA_OUTSIDE_RAIDS;
     public static final ForgeConfigSpec.BooleanValue AURA_ACTIONBAR;
@@ -106,6 +111,14 @@ public final class WarConfig {
     public static final ForgeConfigSpec.ConfigValue<String> AURA_ACTIVE_COLOR;
     public static final ForgeConfigSpec.ConfigValue<String> AURA_CONTESTED_COLOR;
     public static final ForgeConfigSpec.ConfigValue<String> AURA_IMMUNE_COLOR;
+
+    // flagpole
+    public static final ForgeConfigSpec.BooleanValue POLE_ENABLED;
+    public static final ForgeConfigSpec.IntValue POLE_HEIGHT;
+    public static final ForgeConfigSpec.ConfigValue<String> POLE_BLOCK;
+    public static final ForgeConfigSpec.BooleanValue POLE_ANIMATED;
+    public static final ForgeConfigSpec.IntValue POLE_MIDPOINT;
+    public static final ForgeConfigSpec.BooleanValue POLE_REVERSE_ON_DECAY;
 
     // raid_notifications
     public static final ForgeConfigSpec.BooleanValue ALERTS_ENABLED;
@@ -253,12 +266,16 @@ public final class WarConfig {
         b.pop();
 
         b.comment("Territory capture.").push("capture");
-        CAPTURE_SECONDS = b.comment("Seconds of uncontested capture time needed. Contested time never counts.")
-                .defineInRange("duration_seconds", 90, 5, 3600);
+        CAPTURE_SECONDS = b.comment("Seconds of uncontested capture time needed, for every flag. Contested time never counts.",
+                        "Also changed in game with /war admin capturetime <seconds> (saved here). Running captures keep their percentage.")
+                .defineInRange("duration_seconds", DEFAULT_CAPTURE_SECONDS, 5, 3600);
         CAPTURE_RADIUS = b.comment("THE capture radius: horizontal distance from the flag's centre, in blocks.",
                         "Used for capture detection, defender contesting, the particle aura and the action-bar distance.",
                         "Players also need to be between 1 block below and radius+1 blocks above the flag's base.")
                 .defineInRange("radius_blocks", 2.0, 1.0, 16.0);
+        VERTICAL_TOLERANCE = b.comment("Players must stand within this many blocks above or below the flagpole's base",
+                        "(stops capturing from tunnels underneath or roofs above). Used by the aura readout too.")
+                .defineInRange("vertical_tolerance_blocks", 3.0, 1.0, 16.0);
         DECAY_SECONDS = b.comment("Time for a full bar to decay to zero.").defineInRange("decay_seconds", 60, 1, 3600);
         CONTEST_BY_RIVALS = b.comment("Two different attacking sides inside the zone pause the capture.")
                 .define("contest_by_rival_attackers", true);
@@ -283,16 +300,19 @@ public final class WarConfig {
         b.pop();
         b.pop();
 
-        b.comment("Visible capture zone: a particle ring at the flag, sent only to nearby players.").push("capture_aura");
+        b.comment("Visible capture zone: a particle ring around the flagpole's base, sent to EVERY player within",
+                "visibility_distance_blocks (owner, defenders, raiders and neutral players alike). Client particle settings",
+                "can still reduce particles; the action-bar readout is the fallback.").push("capture_aura");
         AURA_ENABLED = b.define("enabled", true);
         AURA_INTERVAL_TICKS = b.defineInRange("particle_interval_ticks", 10, 2, 100);
         AURA_DISTANCE = b.comment("Players within this distance of a flag see its ring.")
-                .defineInRange("visibility_distance_blocks", 24, 4, 96);
+                .defineInRange("visibility_distance_blocks", 48, 4, 128);
         AURA_POINTS = b.comment("Particles per ring.").defineInRange("ring_points", 24, 8, 96);
         AURA_PARTICLE_SIZE = b.defineInRange("particle_size", 1.0, 0.25, 4.0);
         AURA_SHOW_IDLE = b.comment("Ring while nobody is capturing.").define("show_idle_aura", true);
         AURA_SHOW_ACTIVE = b.comment("Ring while the flag is being captured or decaying.").define("show_active_aura", true);
         AURA_SHOW_CONTESTED = b.comment("Ring while the capture is contested.").define("show_contested_aura", true);
+        AURA_SHOW_IMMUNE = b.comment("Ring while the claim has recapture immunity.").define("show_immunity_aura", true);
         AURA_SHOW_COMPLETION = b.comment("Burst of particles when a claim is conquered.").define("show_completion_effect", true);
         AURA_OUTSIDE_RAIDS = b.comment("Also show idle rings outside raid windows (flags cannot be captured then).")
                 .define("show_outside_raids", false);
@@ -303,6 +323,23 @@ public final class WarConfig {
         AURA_CONTESTED_COLOR = b.define("contested_color", "#FFD000", WarConfig::isColor);
         AURA_IMMUNE_COLOR = b.comment("Ring colour while the claim has recapture immunity.")
                 .define("immune_color", "#3C8CFF", WarConfig::isColor);
+        b.pop();
+
+        b.comment("Elevated flagpoles. New and moved flags are built as a vertical pole with the banner hanging near the top.",
+                "Existing flags keep their shape until moved or restored by an admin. Changing height affects new/moved flags only.")
+                .push("flagpole");
+        POLE_ENABLED = b.define("enabled", true);
+        POLE_HEIGHT = b.comment("Banner height above the base; the pole is height+1 blocks tall (base included).",
+                        "The banner can hang at this many positions, so taller poles give smoother animation.")
+                .defineInRange("height_blocks", 4, 2, 12);
+        POLE_BLOCK = b.comment("Block used for the pole. Must be a solid-material block banners can hang on (fences, walls, iron bars).")
+                .define("pole_block", "minecraft:dark_oak_fence");
+        POLE_ANIMATED = b.comment("Lower the owner's banner and raise the attacker's banner with capture progress (stepped, one block per step).")
+                .define("animated_capture", true);
+        POLE_MIDPOINT = b.comment("Progress at which the lowered banner switches to the attacker's design.")
+                .defineInRange("animation_midpoint_percent", 50, 10, 90);
+        POLE_REVERSE_ON_DECAY = b.comment("Run the animation backwards while progress decays (otherwise the banner waits, then resets at 0%).")
+                .define("reverse_animation_on_decay", true);
         b.pop();
 
         b.comment("Live alerts when a specific claim is attacked. These are separate from the raid-window announcements.",

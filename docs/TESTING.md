@@ -46,7 +46,11 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 | Defense credit per defender, one per kingdom; historical kingdoms kept | `statsKingdoms` | as specified | **PASS** |
 | Ranking order and tie-breaks | `rankingOrder` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 112 checks passed` (locally, and on every GitHub
+| Vertical tolerance: 3 below/above inside, tunnel/roof outside, standing next to the raised banner outside | `zoneGeometry` | as specified | **PASS** |
+| Capture time 90 s -> 120 s at 50%: percentage kept, exactly 60 s more; shortening never completes | `captureTimeChange` | as specified | **PASS** |
+| Flag animation frames: 0/20/49/50/70/100%, monotonic descent, decay below midpoint shows owner | `flagAnimation` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 127 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -149,6 +153,34 @@ Actions build as part of `./gradlew build`).
 | B26 | Season end, archive, start, reset confirm | Archive viewable with `/war seasons`; claims, ownership, immunity and flags unchanged. |
 | B27 | Rollback a conquest | Ownership and immunity restored; log shows the conquest as reversed plus a reversal entry; statistics no longer count it. |
 | B28 | Kill the server right after a conquest | After restart exactly one conquest event; `/war admin stats check` reports no duplicates. |
+
+## Flagpole, capture time and statistics-check scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| C1 | `/war admin capturetime 120`, then `/war admin capturetime` | "90s -> 120s"; shows 120 s; config file updated. |
+| C2 | Capture another flag | Takes 120 s. |
+| C3 | Restart | Still 120 s. |
+| C4 | Change 90 -> 120 at 50% mid-capture | Bar stays at 50%; about 60 s more needed; no instant conquest. |
+| C5 | `/war admin capturetime reset`; non-op tries it | Back to 90 s / denied. |
+| C6 | Owner, defender, raider and a neutral player near a flag | All see the same ring (up to 48 blocks). |
+| C7 | Walk outward | Action bar says INSIDE exactly within the ring; capture only inside. |
+| C8 | Spawn admin claim | No ring. |
+| C9 | `/flag place` at Y = 50 | Fence pole Y 50-54, banner hanging at the top on the side you faced; you are moved one step aside. |
+| C10 | `/flag place` under a low ceiling, or facing a wall | Rejected with an explanation; no blocks changed. |
+| C11 | Mine / TNT / piston / build next to the pole and banner slots | All prevented; with `/setblock` removal the pole is rebuilt within 5 s, no item drops left. |
+| C12 | Capture to 25%, 49% | Owner banner steps down the pole. |
+| C13 | Reach 50% | Banner at the bottom shows the attacker's design; `/flag info` still shows the old owner. |
+| C14 | 70%, 100% | Attacker banner rises; conquest happens only at 100%; new owner's banner on top. |
+| C15 | Defender steps in | Banner stops moving; CONTESTED. |
+| C16 | Attackers leave at 70% | Banner lowers, switches back to the owner below 50%, rises to the top at 0%. |
+| C17 | `/flag move` | Whole pole moves; old one gone; no drops. |
+| C18 | Stand on top of the pole / 4 blocks below in a tunnel | Not counted as being in the zone. |
+| C19 | Kill the server mid-animation, restart | Banner back on top with the owner's design. |
+| C20 | `/war admin stats check` | Summary plus integrity; nothing changes (compare war_data.json before/after). |
+| C21 | `/war admin stats check <player>` | Correct per-player values. |
+| C22 | Introduce an inconsistency (e.g. delete a claim with the mod removed), check, then `stats repair confirm` | Warning shown, then fixed; audit-log line. |
+| C23 | FTB party members vs a player only trusted in a claim | Only party members share a kingdom on the leaderboard. |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.

@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import io.github.flemmli97.flan.claim.Claim;
+import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.core.WarCore;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.ClaimState;
@@ -91,7 +92,8 @@ public final class FlagCommand {
         }
         Msg.send(player, Msg.info("State: " + state));
         if (record.hasFlag) {
-            Msg.send(player, Msg.info("Flag at " + record.flagX + ", " + record.flagY + ", " + record.flagZ));
+            Msg.send(player, Msg.info("Flag: " + net.flanwarfare.flag.FlagService.describe(record)
+                    + ". Capture zone: stand within " + WarConfig.CAPTURE_RADIUS.get() + " blocks of the pole's base."));
         }
         if (record.conquered) {
             Msg.send(player, Msg.info("Conquered territory (free of claim blocks and slots; cannot be resized or transferred)."));

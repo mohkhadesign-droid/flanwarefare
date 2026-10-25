@@ -1,6 +1,7 @@
 package net.flanwarfare.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -15,6 +16,7 @@ import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.ClaimState;
 import net.flanwarfare.data.ConquestTxn;
 import net.flanwarfare.flan.Accounting;
+import net.flanwarfare.flag.FlagService;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.logic.ClockMath;
 import net.flanwarfare.util.Msg;
@@ -37,6 +39,7 @@ import java.util.UUID;
  * /war admin reload                    re-validate config and rebuild caches
  * /war admin status                    diagnostics
  * /war admin mode disabled|always|custom
+ * /war admin capturetime [seconds|reset] global capture duration (default 90 s)
  * /war admin setwindow HH:MM HH:MM     custom raid window
  * /war admin flag restore <claim>      rebuild a missing flag (loads its chunk)
  * /war admin flag relocate <claim>     put the flag where you stand (also activates a pending claim)
@@ -95,6 +98,12 @@ public final class WarCommand {
                                 .then(Commands.literal("disabled").executes(ctx -> setMode(ctx, RaidMode.DISABLED)))
                                 .then(Commands.literal("always").executes(ctx -> setMode(ctx, RaidMode.ALWAYS)))
                                 .then(Commands.literal("custom").executes(ctx -> setMode(ctx, RaidMode.CUSTOM))))
+                        .then(Commands.literal("capturetime")
+                                .executes(WarCommand::showCaptureTime)
+                                .then(Commands.literal("reset")
+                                        .executes(ctx -> setCaptureTime(ctx, WarConfig.DEFAULT_CAPTURE_SECONDS)))
+                                .then(Commands.argument("seconds", IntegerArgumentType.integer(5, 3600))
+                                        .executes(ctx -> setCaptureTime(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))))
                         .then(Commands.literal("setwindow")
                                 .then(Commands.argument("window", StringArgumentType.greedyString()).executes(WarCommand::setWindow)))
                         .then(Commands.literal("flag")
@@ -244,6 +253,32 @@ public final class WarCommand {
         return 1;
     }
 
+    private static int showCaptureTime(CommandContext<CommandSource> ctx) {
+        reply(ctx, "Global capture time: " + WarConfig.CAPTURE_SECONDS.get() + "s of uncontested capture (default "
+                + WarConfig.DEFAULT_CAPTURE_SECONDS + "s). Change it with /war admin capturetime <seconds>.");
+        return 1;
+    }
+
+    /**
+     * Sets the global capture duration. The value lives only in the server config file (the
+     * single authoritative setting), so it survives restarts and needs no rebuild. Running
+     * captures keep their percentage and rescale on their next evaluation.
+     */
+    private static int setCaptureTime(CommandContext<CommandSource> ctx, int seconds) {
+        WarCore core = core(ctx);
+        if (core == null) {
+            return 0;
+        }
+        int previous = WarConfig.CAPTURE_SECONDS.get();
+        WarConfig.CAPTURE_SECONDS.set(seconds);
+        WarConfig.CAPTURE_SECONDS.save();
+        audit(core, ctx, "capture time " + previous + "s -> " + seconds + "s");
+        ctx.getSource().sendFeedback(Msg.ok("[Flan Warfare] Global capture time changed: " + previous + "s \u2192 " + seconds
+                + "s." + (core.capture().activeCount() > 0
+                ? " " + core.capture().activeCount() + " running capture(s) keep their percentage." : "")), true);
+        return 1;
+    }
+
     private static int setWindow(CommandContext<CommandSource> ctx) {
         WarCore core = core(ctx);
         if (core == null) {
@@ -369,9 +404,9 @@ public final class WarCommand {
             ServerWorld world = FlanBridge.world(core.server(), record.dimension);
             BlockPos pos = record.flagPos();
             String present = world == null || !world.isBlockLoaded(pos) ? "chunk not loaded"
-                    : world.getBlockState(pos).getBlock().getRegistryName().toString();
-            reply(ctx, "Flag " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " (block: " + present
-                    + ", restore failures " + record.restoreFailures + ")");
+                    : (core.flags().intact(world, record) ? "intact" : "DAMAGED (auto-restore pending)");
+            reply(ctx, "Flag: " + FlagService.describe(record) + " - " + present + ", restore failures "
+                    + record.restoreFailures + (core.flags().isAnimating(record.claimId) ? ", capture animation running" : ""));
         } else {
             reply(ctx, "No flag placed" + (record.flagEverPlaced ? " (one was placed before!)" : "") + ".");
         }

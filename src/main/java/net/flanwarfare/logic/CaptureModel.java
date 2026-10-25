@@ -26,8 +26,8 @@ public final class CaptureModel {
         IDLE, CAPTURING, CONTESTED, DECAYING, COMPLETE
     }
 
-    private final long captureTicks;
-    private final long decayTicks;
+    private long captureTicks;
+    private long decayTicks;
     private double progress;
     private String side;
     private Status status = Status.IDLE;
@@ -93,6 +93,29 @@ public final class CaptureModel {
         } else {
             status = Status.DECAYING;
         }
+    }
+
+    /**
+     * Changes the durations of a running capture (admin changed the global capture time). The
+     * percentage is preserved, so the remaining time scales with the new duration and the
+     * change itself can never complete a capture.
+     */
+    public void rescale(long newCaptureTicks, long newDecayTicks) {
+        if (newCaptureTicks <= 0 || newDecayTicks <= 0) {
+            throw new IllegalArgumentException("capture and decay durations must be positive");
+        }
+        double fraction = fraction();
+        captureTicks = newCaptureTicks;
+        decayTicks = newDecayTicks;
+        progress = Math.min(fraction, Math.nextDown(1.0)) * newCaptureTicks;
+    }
+
+    public long captureTicks() {
+        return captureTicks;
+    }
+
+    public long decayTicks() {
+        return decayTicks;
     }
 
     public double fraction() {

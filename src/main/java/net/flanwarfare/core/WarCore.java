@@ -105,10 +105,12 @@ public final class WarCore {
         core.stats.init();
         core.conquest.recoverPendingTransactions();
         core.lifecycle.reconcileAll();
-        for (String line : core.stats.reconcile()) {
-            FlanWarfare.LOG.info("Statistics check: {}", line);
+        WarStats.Report report = core.stats.check();
+        for (String warning : report.warnings) {
+            FlanWarfare.LOG.warn("Statistics check: {} - run /war admin stats check for details", warning);
         }
         core.flags.rebuildIndex();
+        core.flags.refreshAllOnLoad();
         core.raid.initialise();
         core.ready = true;
         core.saveNow();

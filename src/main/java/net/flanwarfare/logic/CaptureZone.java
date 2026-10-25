@@ -2,9 +2,10 @@ package net.flanwarfare.logic;
 
 /**
  * The one authoritative capture-zone geometry, shared by capture detection, defender
- * contesting, the particle aura and the action-bar distance. The zone is a vertical cylinder:
- * horizontal distance from the centre of the flag block at most {@code radius}, and feet
- * between 1 block below and {@code radius + 1} blocks above the flag's base.
+ * contesting, the particle aura and the action-bar distance. The zone is a vertical cylinder
+ * centred on the flagpole's ground-level base: horizontal distance from the centre of the base
+ * block at most {@code radius}, and feet within {@code verticalTolerance} blocks above or below
+ * the base (so nobody captures from a tunnel underneath or a roof far above).
  */
 public final class CaptureZone {
     private CaptureZone() {
@@ -17,13 +18,13 @@ public final class CaptureZone {
         return Math.sqrt(dx * dx + dz * dz);
     }
 
-    public static boolean withinHeight(double y, int flagY, double radius) {
-        double dy = y - flagY;
-        return dy >= -1.0 && dy <= radius + 1.0;
+    public static boolean withinHeight(double y, int baseY, double verticalTolerance) {
+        return Math.abs(y - baseY) <= verticalTolerance;
     }
 
-    public static boolean inside(double x, double y, double z, int flagX, int flagY, int flagZ, double radius) {
-        return withinHeight(y, flagY, radius) && horizontalDistance(x, z, flagX, flagZ) <= radius;
+    public static boolean inside(double x, double y, double z, int baseX, int baseY, int baseZ, double radius,
+                                 double verticalTolerance) {
+        return withinHeight(y, baseY, verticalTolerance) && horizontalDistance(x, z, baseX, baseZ) <= radius;
     }
 
     /** Point {@code index} of {@code points} evenly spaced on the zone boundary: {x, z}. */

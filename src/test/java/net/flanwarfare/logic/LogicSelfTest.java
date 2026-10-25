@@ -41,6 +41,8 @@ public final class LogicSelfTest {
         statsExactlyOnce();
         statsKingdoms();
         rankingOrder();
+        captureTimeChange();
+        flagAnimation();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -267,10 +269,12 @@ public final class LogicSelfTest {
     }
 
     private static void zoneGeometry() {
-        check(CaptureZone.inside(10.5, 64, 12.5, 10, 64, 10, 2.0), "2.0 blocks: inside");
-        check(!CaptureZone.inside(10.5, 64, 12.6, 10, 64, 10, 2.0), "2.1 blocks: outside");
-        check(!CaptureZone.inside(10.5, 62.9, 10.5, 10, 64, 10, 2.0), "too far below");
-        check(!CaptureZone.inside(10.5, 67.1, 10.5, 10, 64, 10, 2.0), "too far above");
+        check(CaptureZone.inside(10.5, 64, 12.5, 10, 64, 10, 2.0, 3.0), "2.0 blocks: inside");
+        check(!CaptureZone.inside(10.5, 64, 12.6, 10, 64, 10, 2.0, 3.0), "2.1 blocks: outside");
+        check(CaptureZone.inside(10.5, 61.0, 10.5, 10, 64, 10, 2.0, 3.0), "3 below: inside tolerance");
+        check(!CaptureZone.inside(10.5, 60.9, 10.5, 10, 64, 10, 2.0, 3.0), "tunnel 3.1 below: outside");
+        check(!CaptureZone.inside(10.5, 67.1, 10.5, 10, 64, 10, 2.0, 3.0), "roof 3.1 above: outside");
+        check(!CaptureZone.inside(10.5, 68.0, 10.5, 10, 64, 10, 2.0, 3.0), "standing by the raised banner (4 up): outside");
         boolean allOnRadius = true;
         for (int i = 0; i < 24; i++) {
             double[] p = CaptureZone.ringPoint(10, 10, 2.0, i, 24);
@@ -436,6 +440,40 @@ public final class LogicSelfTest {
         eq("x", rows.get(1).id, "second");
         rows.sort(StatRow.BY_TERRITORY);
         eq("a", rows.get(0).id, "territory ranking by total held");
+    }
+
+    private static void captureTimeChange() {
+        CaptureModel m = new CaptureModel(90 * 20, 60 * 20);
+        run(m, 90, sides("A"), false); // 45 s = 50%
+        eqd(0.5, m.fraction(), "50% before change");
+        m.rescale(120 * 20, 60 * 20);
+        eqd(0.5, m.fraction(), "percentage preserved when 90 s -> 120 s");
+        run(m, 119, sides("A"), false);
+        eq(CaptureModel.Status.CAPTURING, m.status(), "59.5 s later: not yet");
+        run(m, 1, sides("A"), false);
+        eq(CaptureModel.Status.COMPLETE, m.status(), "60 more seconds complete it");
+        CaptureModel n = new CaptureModel(120 * 20, 60 * 20);
+        run(n, 238, sides("A"), false); // 99.2%
+        n.rescale(60 * 20, 60 * 20);
+        check(n.status() != CaptureModel.Status.COMPLETE && n.fraction() < 1.0, "shortening never completes by itself");
+    }
+
+    private static void flagAnimation() {
+        eq(new FlagAnimation.Frame(4, false), FlagAnimation.frame(0.0, 50, 4), "0%: owner raised");
+        eq(new FlagAnimation.Frame(3, false), FlagAnimation.frame(0.20, 50, 4), "20%: owner lowering");
+        eq(new FlagAnimation.Frame(1, false), FlagAnimation.frame(0.49, 50, 4), "49%: owner near bottom");
+        eq(new FlagAnimation.Frame(1, true), FlagAnimation.frame(0.50, 50, 4), "50%: attacker design at bottom");
+        eq(new FlagAnimation.Frame(2, true), FlagAnimation.frame(0.70, 50, 4), "70%: attacker rising");
+        eq(new FlagAnimation.Frame(4, true), FlagAnimation.frame(1.0, 50, 4), "100%: attacker at top");
+        int lastLevel = 4;
+        boolean monotonic = true;
+        for (int p = 0; p < 50; p++) {
+            FlagAnimation.Frame f = FlagAnimation.frame(p / 100.0, 50, 4);
+            monotonic &= !f.attacker && f.level <= lastLevel;
+            lastLevel = f.level;
+        }
+        check(monotonic, "owner banner only descends before the midpoint");
+        eq(new FlagAnimation.Frame(1, false), FlagAnimation.frame(0.45, 50, 4), "decay below 50%: owner design again");
     }
 
     private static Set<UUID> set(UUID... ids) {

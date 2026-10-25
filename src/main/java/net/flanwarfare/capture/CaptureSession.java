@@ -28,6 +28,8 @@ final class CaptureSession {
     final java.util.Set<UUID> attackersSeen = new java.util.LinkedHashSet<>();
     /** An attacker was still in the zone after progress stopped being allowed (raid over). */
     boolean attackersStayedAfterRaid;
+    /** Design of the latest designated capturer, shown after the animation midpoint. */
+    String attackerDesign;
     private String lastTitle = "";
     private int lastPercent = -1;
     private CaptureModel.Status lastStatus;

@@ -54,7 +54,8 @@ import java.util.function.Predicate;
  * /war admin immunity inspect|clear [&lt;claim&gt;]   (default: the claim you stand in)
  * /war admin immunity set &lt;duration&gt; [&lt;claim&gt;]  e.g. 24h, 90m, 1d12h, 0
  * /war admin season info|start &lt;name&gt;|end|archive|reset confirm
- * /war admin stats check
+ * /war admin stats check [&lt;player&gt;]          read-only integrity report
+ * /war admin stats repair confirm              apply the safe corrections
  * </pre>
  */
 public final class StatsCommand {
@@ -197,7 +198,15 @@ public final class StatsCommand {
                                                 + "Run /war admin season reset confirm to proceed."))
                                         .then(Commands.literal("confirm").executes(ctx -> seasonOp(ctx, "reset")))))
                         .then(Commands.literal("stats")
-                                .then(Commands.literal("check").executes(StatsCommand::statsCheck)))));
+                                .then(Commands.literal("check")
+                                        .executes(StatsCommand::statsCheck)
+                                        .then(Commands.argument("player", StringArgumentType.word()).suggests(PLAYERS)
+                                                .executes(StatsCommand::statsCheckPlayer)))
+                                .then(Commands.literal("repair")
+                                        .executes(ctx -> fail(ctx, "Repair removes duplicate events, re-syncs owners from Flan, "
+                                                + "drops records of deleted claims and clears invalid immunity. "
+                                                + "Run /war admin stats repair confirm to proceed."))
+                                        .then(Commands.literal("confirm").executes(StatsCommand::statsRepair))))));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -782,17 +791,114 @@ public final class StatsCommand {
         return 1;
     }
 
+    /** Read-only: never modifies data. */
     private static int statsCheck(CommandContext<CommandSource> ctx) {
         WarCore core = core(ctx);
         if (core == null) {
             return 0;
         }
-        core.lifecycle().reconcileAll();
-        for (String text : core.stats().reconcile()) {
-            line(ctx, text, TextFormatting.YELLOW);
+        WarStats.Report report = core.stats().check();
+        header(ctx, "WAR STATISTICS CHECK");
+        for (String text : report.summary) {
+            line(ctx, text, text.startsWith("Statistics Integrity") && !report.warnings.isEmpty()
+                    ? TextFormatting.RED : TextFormatting.WHITE);
         }
-        core.saveNow();
-        core.audit("Admin {}: statistics check", ctx.getSource().getName());
+        for (String text : report.warnings) {
+            line(ctx, "WARNING: " + text, TextFormatting.RED);
+        }
+        for (String text : report.notes) {
+            line(ctx, "Note: " + text, TextFormatting.GRAY);
+        }
+        if (!report.warnings.isEmpty()) {
+            line(ctx, "Nothing was changed. To fix: /war admin stats repair confirm", TextFormatting.YELLOW);
+        }
+        return 1;
+    }
+
+    /** Read-only per-player inspection. */
+    private static int statsCheckPlayer(CommandContext<CommandSource> ctx) {
+        WarCore core = core(ctx);
+        if (core == null) {
+            return 0;
+        }
+        String name = StringArgumentType.getString(ctx, "player");
+        GameProfile profile = profile(core, name);
+        if (profile == null) {
+            return fail(ctx, "Unknown player: " + name);
+        }
+        UUID id = profile.getId();
+        StatsAggregator stats = core.stats().aggregate();
+        StatRow row = stats.player(id);
+        if (row == null) {
+            row = new StatRow(id.toString(), profile.getName());
+        }
+        int ordinary = 0;
+        int conquered = 0;
+        int mismatched = 0;
+        List<String> immune = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        for (ClaimRecord record : core.data().claims().values()) {
+            Claim claim = FlanBridge.find(core.server(), record);
+            if (claim == null || claim.isAdminClaim()) {
+                continue;
+            }
+            boolean flanOwner = id.equals(claim.getOwner());
+            if (flanOwner != id.equals(record.owner)) {
+                mismatched++;
+            }
+            if (!flanOwner) {
+                continue;
+            }
+            if (record.conquered) {
+                conquered++;
+            } else {
+                ordinary++;
+            }
+            long left = record.immunityRemaining(now);
+            if (left > 0) {
+                immune.add(FlanBridge.label(claim) + " (" + Msg.duration(left) + " left)");
+            }
+        }
+        int max = WarConfig.MAX_CONQUERED_PER_PLAYER.get();
+        net.flanwarfare.team.SideResolver.Kingdom kingdom = core.sides().kingdomOf(id);
+        header(ctx, "PLAYER CHECK: " + FlanBridge.playerName(core.server(), id));
+        line(ctx, "UUID: " + id, TextFormatting.GRAY);
+        line(ctx, "Kingdom: " + (kingdom == null ? "none / unavailable" : kingdom.name + " [" + kingdom.id + "]"), TextFormatting.WHITE);
+        line(ctx, "Successful Conquests: " + row.conquests, TextFormatting.WHITE);
+        line(ctx, "Successful Defenses: " + row.defenses, TextFormatting.WHITE);
+        line(ctx, "Territory Lost: " + row.lost, TextFormatting.WHITE);
+        line(ctx, "Current Ordinary Claims: " + ordinary, TextFormatting.WHITE);
+        line(ctx, "Current Conquered Claims: " + conquered + " / " + maxText(), TextFormatting.WHITE);
+        line(ctx, "Remaining Conquest Slots: " + (max < 0 ? "unlimited" : String.valueOf(Math.max(0, max - conquered))),
+                TextFormatting.WHITE);
+        line(ctx, "Active Recapture Immunity: " + (immune.isEmpty() ? "none" : String.join(", ", immune)), TextFormatting.WHITE);
+        boolean problems = false;
+        if (conquered != Accounting.conqueredCount(core.server(), id)) {
+            line(ctx, "WARNING: conquered-claim count disagrees with Flan accounting.", TextFormatting.RED);
+            problems = true;
+        }
+        if (mismatched > 0) {
+            line(ctx, "WARNING: " + mismatched + " claim record(s) disagree with Flan about this player's ownership "
+                    + "(fix: /war admin stats repair confirm).", TextFormatting.RED);
+            problems = true;
+        }
+        if (max >= 0 && conquered > max) {
+            line(ctx, "Note: above the conquest limit (limit was lowered); no claims are removed.", TextFormatting.GRAY);
+        }
+        if (!problems) {
+            line(ctx, "No inconsistencies found.", TextFormatting.GREEN);
+        }
+        return 1;
+    }
+
+    private static int statsRepair(CommandContext<CommandSource> ctx) {
+        WarCore core = core(ctx);
+        if (core == null) {
+            return 0;
+        }
+        for (String text : core.stats().repair(ctx.getSource().getName())) {
+            line(ctx, text, TextFormatting.GREEN);
+        }
         return 1;
     }
 }

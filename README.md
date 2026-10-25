@@ -11,7 +11,7 @@ war history.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 112
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 127
 > automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
@@ -43,8 +43,9 @@ the real Flan 1.7.2 JAR and are never packaged.
 
 **New claims start inactive.** Right after creating a claim with Flan, it protects nothing and
 cannot be managed (no trust, permissions, subclaims, resizing, renaming, home or transfer).
-The owner stands inside it and runs `/flag place`, which puts a standing banner at their feet
-and activates the claim. Reminders run for 10 minutes; after that the claim simply stays
+The owner stands inside it and runs `/flag place`. That builds a **flagpole** where they stand
+and activates the claim. The pole is a dark oak fence column 5 blocks tall, with the owner's
+banner hanging near the top, about 4 blocks up. The owner is moved one step aside. Reminders run for 10 minutes; after that the claim simply stays
 inactive. Claims that never get a flag expire after 24 hours (listed for admins, or
 automatically abandoned if `auto_abandon_expired_claims = true`).
 
@@ -77,7 +78,9 @@ Admin claims (your spawn), excluded claims, disabled dimensions and other protec
 ### Capture zone, capturing and defending
 
 Every capturable flag shows a **ring of particles** on the ground: that is the capture zone,
-2 blocks around the flag. The ring is drawn with the same radius the server uses to detect
+2 blocks around the pole's base. Everyone within 48 blocks sees it: owner, defenders, raiders and
+bystanders. Stand at ground level by the pole; you don't climb to the banner. Players more than
+3 blocks above or below the base, on a roof or in a tunnel, don't count. The ring is drawn with the same radius the server uses to detect
 players, from one shared setting. Its colour shows the state:
 
 - grey: idle;
@@ -88,7 +91,21 @@ A burst of particles marks a conquest. Players near the zone also get an action-
 e.g. `Capture Zone - 1.4 / 2.0 blocks from flag - INSIDE`.
 
 During a raid, an enemy standing inside the zone fills a boss bar over **90 seconds** of
-uncontested time. Time spent contested never counts.
+uncontested time. Time spent contested never counts. Admins can change this for every flag with
+`/war admin capturetime <seconds>`. A capture already running keeps its percentage, so at 50%,
+switching from 90 s to 120 s leaves about 60 s to go.
+
+**The flag moves with the capture:**
+
+- The owner's banner slides down the pole as progress climbs to 50%.
+- At 50% it switches to the attacker's banner design. Ownership doesn't change.
+- The attacker's banner climbs back up as progress reaches 100%.
+
+A defender in the zone freezes it in place. If the capture drains away, the whole thing plays
+backwards and the owner's banner ends up on top again.
+
+The banner moves one block at a time. Minecraft 1.16.5 can only place banners at whole-block
+heights without a client mod, so a 4-block pole gives 4 positions down and 4 back up.
 
 - **Defending is just standing there.** As soon as the owner, or another defender, is inside the
   zone, progress pauses and the bar says **CONTESTED**. It stays paused until every defender has
@@ -229,6 +246,9 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin reload` | Re-validate the config, rebuild caches and re-detect FTB Teams. |
 | `/war admin mode disabled\|always\|custom` | Change the raid mode (saved to the config). |
 | `/war admin setwindow 15:00 06:00` | Change the custom raid window (saved). |
+| `/war admin capturetime` | Show the global capture time. |
+| `/war admin capturetime <seconds>` | Set the capture time for every flag (saved in the config; running captures keep their %). |
+| `/war admin capturetime reset` | Back to 90 seconds. |
 | `/war admin flag restore <claim>` | Rebuild a missing flag at its registered position. |
 | `/war admin flag relocate <claim>` | Put the flag where you stand. This also activates a pending claim. |
 | `/war admin claim inspect [<claim>]` | State, live state, owners, flag block, accounting and the conquest journal. Without an argument it uses the claim you stand in. |
@@ -241,7 +261,9 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin season info` | Current season, recording state, archives. |
 | `/war admin season start <name>` / `end` / `archive` | Season lifecycle (start archives a finished season automatically). |
 | `/war admin season reset confirm` | Clear the current season's statistics after writing a backup archive. |
-| `/war admin stats check` | Reconcile statistics with Flan and the conquest journal; removes duplicate events and reports problems. |
+| `/war admin stats check` | Read-only report: season, players, kingdoms, conquests, defenses, conquered claims, log entries, integrity warnings. Changes nothing. |
+| `/war admin stats check <player>` | Read-only player report: UUID, kingdom, conquests, defenses, losses, ordinary/conquered claims, slots, immunity, inconsistencies. |
+| `/war admin stats repair confirm` | Apply the safe fixes the check reports (duplicates, owner re-sync, deleted claims, invalid immunity). Audit-logged. |
 
 `<claim>` is the Flan claim UUID; press Tab to complete it. Operators who switch on Flan's own
 admin mode can still manage inactive claims through Flan.
@@ -272,11 +294,15 @@ values are:
 | `flags.auto_abandon_expired_claims` | `false` | Delete expired claims through Flan |
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
 | `capture.radius_blocks` | `2.0` | **The** capture radius: detection, contesting, aura and distance readout |
+| `capture.vertical_tolerance_blocks` | `3.0` | How far above/below the pole base still counts |
+| `flagpole.enabled` / `height_blocks` / `pole_block` | `true` / `4` / `minecraft:dark_oak_fence` | New and moved flags only |
+| `flagpole.animated_capture` / `animation_midpoint_percent` / `reverse_animation_on_decay` | `true` / `50` / `true` | |
 | `capture.duration_seconds` / `decay_seconds` | `90` / `60` | Uncontested capture time / full-bar decay |
 | `capture.contest_by_rival_attackers` | `true` | |
 | `capture.defenders.enabled` / `owner_can_contest` / `team_members_defend` | `true` | |
 | `capture.defenders.trusted_defenders` | `MANAGERS` | `MANAGERS`, `ALL_MEMBERS` or `NONE` |
-| `capture_aura.enabled` / `particle_interval_ticks` / `visibility_distance_blocks` | `true` / `10` / `24` | |
+| `capture_aura.enabled` / `particle_interval_ticks` / `visibility_distance_blocks` | `true` / `10` / `48` | Seen by every nearby player |
+| `capture_aura.show_immunity_aura` | `true` | |
 | `capture_aura.show_idle_aura` / `show_active_aura` / `show_contested_aura` / `show_completion_effect` | `true` | |
 | `capture_aura.idle_color` / `active_color` / `contested_color` | grey / red / yellow | `#RRGGBB` |
 | `capture_aura.show_outside_raids` | `false` | Idle rings outside raids too |
@@ -320,6 +346,14 @@ Fixed rules (deliberately not configurable, for safety):
   add-on notices within 5 seconds and rebuilds it, and deletes fresh banner drops next to it. If
   it can't rebuild the flag 3 times in a row, the claim goes to `RECOVERY_REQUIRED`. The claim
   stays raidable and capturable, so destroying a flag never makes a claim immune.
+- **Flag animation is stepped, not smooth.** 1.16.5 has no display entities, and banners only
+  sit at whole-block positions. A smooth version would need either armour-stand tricks (fragile,
+  and their positioning can't be checked without a client) or a client mod. Taller poles
+  (`height_blocks`) give more steps.
+- **Wooden poles can burn** if fire reaches them (fire isn't a Forge break event). The
+  restore check rebuilds the pole within 5 seconds.
+- **Flags placed before this update** stay single banners until moved (`/flag move`) or rebuilt
+  with `/war admin flag relocate`.
 - **Particles** follow the player's own particle setting. With particles set to Minimal the ring
   may be faint, but the action-bar distance readout still shows the zone.
 - **Sleep mods** that change time directly instead of through Forge's sleep event can skip raid
