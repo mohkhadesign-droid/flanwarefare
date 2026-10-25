@@ -21,6 +21,13 @@ final class CaptureSession {
     final ServerBossInfo bar;
     /** Owner was told this capture started (start alert is sent once real progress begins). */
     boolean startAlertSent;
+
+    // Defense statistics (do not affect the capture itself).
+    double peakFraction;
+    final java.util.Set<UUID> contestingDefenders = new java.util.LinkedHashSet<>();
+    final java.util.Set<UUID> attackersSeen = new java.util.LinkedHashSet<>();
+    /** An attacker was still in the zone after progress stopped being allowed (raid over). */
+    boolean attackersStayedAfterRaid;
     private String lastTitle = "";
     private int lastPercent = -1;
     private CaptureModel.Status lastStatus;

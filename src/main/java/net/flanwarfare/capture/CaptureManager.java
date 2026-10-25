@@ -7,9 +7,11 @@ import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.logic.CaptureModel;
 import net.flanwarfare.logic.CaptureZone;
+import net.flanwarfare.logic.DefenseRules;
 import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
+import net.minecraft.util.text.TextFormatting;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,8 +41,12 @@ public final class CaptureManager {
         final Set<String> attackerSides = new HashSet<>();
         final Map<String, Set<UUID>> attackersBySide = new HashMap<>();
         final Set<UUID> everyone = new HashSet<>();
-        int defenders;
+        final Set<UUID> defenders = new HashSet<>();
+        final Set<UUID> allAttackers = new HashSet<>();
     }
+
+    private static final long NOTICE_INTERVAL_MILLIS = 20_000L;
+    private final Map<String, Long> notices = new HashMap<>();
 
     private static final Presence NOBODY = new Presence();
 
@@ -66,6 +72,8 @@ public final class CaptureManager {
 
         Map<UUID, Claim> claims = new HashMap<>();
         Map<UUID, Presence> presence = new HashMap<>();
+        Map<UUID, Boolean> slots = new HashMap<>();
+        long now = System.currentTimeMillis();
         double radius = WarConfig.CAPTURE_RADIUS.get();
         for (ServerPlayerEntity player : core.server().getPlayerList().getPlayers()) {
             if (!canTakePart(player)) {
@@ -89,14 +97,36 @@ public final class CaptureManager {
                 if (role == SideResolver.Role.NEUTRAL) {
                     continue;
                 }
-                p.everyone.add(player.getUniqueID());
+                UUID id = player.getUniqueID();
                 if (role == SideResolver.Role.DEFENDER) {
-                    p.defenders++;
-                } else {
-                    String side = core.sides().sideOf(player.getUniqueID());
-                    p.attackerSides.add(side);
-                    p.attackersBySide.computeIfAbsent(side, s -> new HashSet<>()).add(player.getUniqueID());
+                    p.everyone.add(id);
+                    p.defenders.add(id);
+                    continue;
                 }
+                // Attackers who cannot capture this flag right now are ignored (they neither
+                // capture nor contest) and told why.
+                long immunity = record.immunityRemaining(now);
+                if (immunity > 0) {
+                    if (!raidOpen) {
+                        continue;
+                    }
+                    notice(player, record, "immune", () -> {
+                        Msg.send(player, Msg.text("This territory is immune to conquest.", TextFormatting.AQUA));
+                        Msg.send(player, Msg.text("Recapture available in: " + Msg.duration(immunity), TextFormatting.AQUA));
+                    });
+                    continue;
+                }
+                if (!slots.computeIfAbsent(id, core.conquest()::hasConquestSlot)) {
+                    if (raidOpen) {
+                        notice(player, record, "limit", () -> core.conquest().sendLimitMessage(player));
+                    }
+                    continue;
+                }
+                p.everyone.add(id);
+                p.allAttackers.add(id);
+                String side = core.sides().sideOf(id);
+                p.attackerSides.add(side);
+                p.attackersBySide.computeIfAbsent(side, s -> new HashSet<>()).add(id);
             }
         }
 
@@ -104,6 +134,20 @@ public final class CaptureManager {
         toVisit.addAll(presence.keySet());
         for (UUID claimId : toVisit) {
             step(claimId, claims, presence.getOrDefault(claimId, NOBODY), raidOpen, windowId, interval);
+        }
+    }
+
+    /** Sends a message to a player about a flag at most once per 20 seconds. */
+    private void notice(ServerPlayerEntity player, ClaimRecord record, String kind, Runnable send) {
+        String key = player.getUniqueID() + "|" + record.claimId + "|" + kind;
+        long now = System.currentTimeMillis();
+        Long last = notices.get(key);
+        if (last == null || now - last >= NOTICE_INTERVAL_MILLIS) {
+            notices.put(key, now);
+            send.run();
+        }
+        if (notices.size() > 512) {
+            notices.values().removeIf(t -> now - t > NOTICE_INTERVAL_MILLIS);
         }
     }
 
@@ -139,8 +183,9 @@ public final class CaptureManager {
         }
         CaptureSession session = sessions.get(claimId);
         boolean attackers = !presence.attackerSides.isEmpty();
+        boolean immune = record.immunityRemaining(System.currentTimeMillis()) > 0;
         if (session == null) {
-            if (!raidOpen || !attackers) {
+            if (!raidOpen || !attackers || immune) {
                 return;
             }
             session = open(record, windowId);
@@ -150,10 +195,18 @@ public final class CaptureManager {
             session = open(record, windowId);
         }
 
-        boolean progressAllowed = raidOpen && session.windowId == windowId;
+        boolean progressAllowed = raidOpen && session.windowId == windowId && !immune;
         CaptureModel.Status before = session.model.status();
         CaptureModel.Status status = session.model.step(dt, progressAllowed, presence.attackerSides,
-                presence.defenders > 0, WarConfig.CONTEST_BY_DEFENDERS.get(), WarConfig.CONTEST_BY_RIVALS.get());
+                !presence.defenders.isEmpty(), WarConfig.CONTEST_BY_DEFENDERS.get(), WarConfig.CONTEST_BY_RIVALS.get());
+        session.peakFraction = Math.max(session.peakFraction, session.model.fraction());
+        session.attackersSeen.addAll(presence.allAttackers);
+        if (progressAllowed && attackers && !presence.defenders.isEmpty()) {
+            session.contestingDefenders.addAll(presence.defenders);
+        }
+        if (!progressAllowed && attackers) {
+            session.attackersStayedAfterRaid = true;
+        }
         String side = session.model.side();
         Set<UUID> sidePlayers = side == null ? Collections.<UUID>emptySet()
                 : presence.attackersBySide.getOrDefault(side, Collections.<UUID>emptySet());
@@ -167,13 +220,13 @@ public final class CaptureManager {
             core.alerts().captureStarted(claim, record, percent);
         } else if (status == CaptureModel.Status.CONTESTED && before != CaptureModel.Status.CONTESTED
                 && session.startAlertSent) {
-            core.alerts().captureContested(claim, record, percent, presence.defenders > 0);
+            core.alerts().captureContested(claim, record, percent, !presence.defenders.isEmpty());
         }
 
         if (status == CaptureModel.Status.COMPLETE) {
             UUID winner = session.selector.designated();
             boolean conquered = winner != null && progressAllowed
-                    && core.conquest().complete(claim, record, winner, presence.everyone);
+                    && core.conquest().complete(claim, record, winner, presence.everyone, sidePlayers);
             close(claimId, conquered ? End.CONQUERED : End.FAILED, claim, record);
             return;
         }
@@ -197,12 +250,30 @@ public final class CaptureManager {
             return;
         }
         session.close();
+        if (reason == End.FAILED && claim != null && record != null) {
+            creditDefense(session, claim, record);
+        }
         if (session.startAlertSent && claim != null && record != null) {
             if (reason == End.FAILED) {
                 core.alerts().captureFailed(claim, record);
             } else if (reason == End.CANCELLED) {
                 core.alerts().captureCancelled(claim, record);
             }
+        }
+    }
+
+    /** Statistics only: a capture that decayed to zero after defenders contested it. */
+    private void creditDefense(CaptureSession session, Claim claim, ClaimRecord record) {
+        if (!core.stats().defensesTracked()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        boolean qualifies = DefenseRules.qualifies(session.peakFraction, WarConfig.DEFENSE_MIN_PERCENT.get(),
+                session.contestingDefenders.size(), session.attackersStayedAfterRaid,
+                core.stats().lastDefenseAt(record.claimId), now, WarConfig.DEFENSE_COOLDOWN_MINUTES.get() * 60_000L);
+        if (qualifies) {
+            core.stats().recordDefense(claim, record, session.contestingDefenders, session.attackersSeen,
+                    (int) Math.floor(session.peakFraction * 100.0));
         }
     }
 

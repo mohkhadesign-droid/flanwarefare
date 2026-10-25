@@ -34,4 +34,18 @@ public final class ConquestTxn {
     public long startedAt;
     public long finishedAt;
     public String note;
+
+    // Recorded when the transaction is journaled, so history reflects the moment of conquest.
+    public long previousImmuneUntil;
+    public String claimLabel;
+    public int x;
+    public int z;
+    public String oldOwnerName;
+    public String newOwnerName;
+    public String oldKingdomId;
+    public String oldKingdomName;
+    public String newKingdomId;
+    public String newKingdomName;
+    public java.util.List<UUID> participants = new java.util.ArrayList<>();
+    public java.util.List<String> participantNames = new java.util.ArrayList<>();
 }

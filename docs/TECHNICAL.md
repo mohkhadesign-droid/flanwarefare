@@ -132,7 +132,7 @@ restart.
 | `allow_block_interactions` | `INTERACTBLOCK` (Flan's generic fallback, which is where crafting stations and most modded machines land), `ANVIL`, `ENCHANTMENTTABLE`, `BEACON`, `LECTERNTAKE`, `NOTEBLOCK`, `JUKEBOX` |
 | `allow_projectiles_and_pearls` | `PROJECTILES`, `ENDERPEARL`, `CHORUSFRUIT`, `TRAMPLE` |
 | `allow_entity_damage` | `HURTANIMAL`, `BREAKNONLIVING`, `ARMORSTAND`, `ITEMFRAMEROTATE` |
-| `allow_pvp` | `HURTPLAYER`, granted to everyone in the claim (members too, so defenders can fight back) |
+| `allow_pvp_during_raids` | `HURTPLAYER`, granted to everyone in the claim (members too, so defenders can fight back) |
 | `allow_buckets` | `BUCKET` |
 | `allow_fake_players` | `FAKEPLAYER` (Flan substitutes this for every action of a non-member fake player) |
 
@@ -216,3 +216,123 @@ There are three independent sources, and the derived state (`ClaimWarState`) nev
 - **Admin claims:** excluded by claim type at every trigger. The owner's op status plays no part.
 - **Offline owners:** events are kept in `war_data.json`, coalesced per claim and type within
   10 minutes, at most 20 per player, and shown and cleared at login.
+
+## 12. PvP during raids (verified in Flan 1.7.2)
+
+Flan decides player damage in `EntityInteractEvents.attackSimple(attacker, target)`, called from
+two places:
+
+- `AttackEntityEvent` (melee);
+- the `LivingDamageEvent` handler `preventDamage`, which uses `DamageSource.getTrueSource()`. That
+  covers arrows, crossbows, tridents and any modded weapon whose damage source credits the
+  attacking player.
+
+For a player target it checks `canInteract(attacker, HURTPLAYER, target position)`, which posts
+`PermissionCheckEvent`. During raids the add-on answers SUCCESS for HURTPLAYER in ordinary claims
+(active, recovery, or without a flag), for members as well, so both sides can fight. Fake
+players are included only if `allow_fake_players` is on.
+
+This never overrides:
+
+- `pvp=false` in `server.properties`, which vanilla applies before any event;
+- other mods' invulnerability or friendly-fire rules, which cancel their own events;
+- admin claims, which are skipped entirely.
+
+Defender combat and capture contesting are independent: contesting only needs presence.
+
+**Correction to section 9:** Flan's `preventDamage` also protects non-player, non-monster
+entities (animals, villagers) from explosion damage in claims, by asking
+`canInteract(null, EXPLOSIONS, entityPos)`. That happens after the Detonate event, so the
+add-on's source context is not set. The hook tells the two calls apart:
+
+- inside Detonate it decides block damage per source;
+- outside it decides entity damage with `allow_explosion_entity_damage`.
+
+## 13. Conquest limit and recapture immunity
+
+- **Conquest slots:** `Accounting.conqueredCount` counts the claims a player currently owns in
+  Flan that are marked conquered, across all worlds. Each claim counts once and the count is
+  computed live, so losing, deleting or abandoning a claim frees the slot instantly. Ordinary
+  claims never count.
+- **When slots are checked:**
+  - at every capture evaluation: an attacker at the limit is ignored and told why, so an eligible
+    teammate becomes the designated capturer;
+  - again inside the conquest transaction.
+- **Lowering the limit** removes nothing.
+- **Immunity:** `ClaimRecord.immuneUntil` holds real epoch milliseconds. It is set inside the
+  conquest's `apply` step on the first application only (startedAt + configured hours), so crash
+  recovery does not extend it. The previous value is kept in the journal and restored by
+  rollback.
+- **While immune:**
+  - no capture session can start;
+  - an existing session (for example after an admin sets immunity mid-capture) cannot progress;
+  - completion is refused.
+- **Raid permissions and raid alerts are unaffected.** No capture alert is sent, because no
+  session starts.
+- **Survival:** the timer survives restarts (war_data.json), flag moves and renames (the key is
+  the claim UUID). It is deleted with the claim record when Flan deletes the claim. Changing
+  `recapture_immunity_hours` only affects future conquests.
+
+## 14. Season statistics and war log
+
+**Storage.** The active season (id, name, start, end, events) lives in `war_data.json`. Archives
+are written to `data/flanwarfare/seasons/<id>.json` with final rankings.
+
+**Exactly once.**
+
+- A conquest event's id is its transaction id. It is added in the same atomic file write that
+  marks the transaction COMMITTED, both normally and during startup recovery. A crash leaves
+  either PENDING with no event, which recovery then completes and records, or COMMITTED with the
+  event.
+- The aggregator also ignores repeated ids, and `/war admin stats check` removes them.
+
+**Events.** `CONQUEST` doubles as the territory-loss record for the previous owner. `DEFENSE`
+holds one entry per qualifying capture session. `CONQUEST_REVERSED` is written by administrator
+rollback, and the original conquest is then marked `reversed` instead of being deleted.
+
+**Statistics from events.**
+
+| Statistic | Counted from |
+|---|---|
+| Conquests | Non-reversed CONQUEST where the player is the new owner |
+| Lost | Non-reversed CONQUEST where the player is the previous owner |
+| Defenses | DEFENSE events listing the player. The kingdom gets 1 per event |
+| Territory held | Live from Flan owners of the add-on's claim records (admin and excluded claims have none) |
+
+**Kingdoms.** An FTB Teams party, identified by team UUID with its display name. The kingdom is
+recorded on each event at the time it happens, while current territory uses the owner's present
+kingdom. When FTB Teams or the party type is unavailable, kingdom fields stay empty and only
+player statistics are shown.
+
+**Defense credit** (`logic/DefenseRules`). Each capture session tracks four things:
+
+- its peak progress;
+- the defenders who stood in the zone while an attacker was there during the raid;
+- the attackers it saw;
+- whether an attacker stayed after progress stopped being allowed.
+
+When the session ends by decaying to zero with nobody present, a defense is recorded if:
+
+- peak ≥ `defense_minimum_capture_percent`;
+- at least one defender contested;
+- no attacker stayed after the raid;
+- the claim's last credited defense is older than `defense_cooldown_minutes`.
+
+Sessions ended by conquest, admin cancellation, a new raid window or claim deletion never count.
+
+**Seasons.**
+
+- `start` refuses while a season is running, and auto-archives an ended one.
+- `end` freezes recording.
+- `archive` writes the archive file and clears the active season.
+- `reset confirm` writes a backup archive, then clears the events.
+
+None of them touch claims, owners, slots, immunity, flags or configuration. Between seasons
+nothing is recorded, and `/war admin status` says so.
+
+**Reconciliation** at startup and through `/war admin stats check`:
+
+- removes duplicate or invalid events;
+- re-syncs claim owners from Flan;
+- reports conquests without kingdom attribution;
+- reports committed conquests that have no statistics entry. These are never invented.

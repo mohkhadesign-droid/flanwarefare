@@ -15,6 +15,7 @@ import net.flanwarfare.data.WarData;
 import net.flanwarfare.flag.FlagService;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.raid.RaidScheduler;
+import net.flanwarfare.stats.WarStats;
 import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
 import net.minecraft.server.MinecraftServer;
@@ -46,6 +47,7 @@ public final class WarCore {
     private final SideResolver sides;
     private final RaidAlerts alerts;
     private final CaptureAura aura;
+    private final WarStats stats;
     private volatile boolean ready;
     private long ticks;
     private long lastSaveTick;
@@ -62,6 +64,7 @@ public final class WarCore {
         this.conquest = new ConquestService(this);
         this.alerts = new RaidAlerts(this);
         this.aura = new CaptureAura(this);
+        this.stats = new WarStats(this);
     }
 
     /** The current core, possibly in safe mode. */
@@ -99,8 +102,12 @@ public final class WarCore {
             FlanWarfare.LOG.warn("Config problem: {}", problem);
         }
         core.sides.init();
+        core.stats.init();
         core.conquest.recoverPendingTransactions();
         core.lifecycle.reconcileAll();
+        for (String line : core.stats.reconcile()) {
+            FlanWarfare.LOG.info("Statistics check: {}", line);
+        }
         core.flags.rebuildIndex();
         core.raid.initialise();
         core.ready = true;
@@ -217,6 +224,10 @@ public final class WarCore {
 
     public CaptureAura aura() {
         return aura;
+    }
+
+    public WarStats stats() {
+        return stats;
     }
 
     /** Live state of a claim (see {@link ClaimWarState}). */

@@ -36,6 +36,8 @@ public final class ClaimRecord {
     public long conqueredAt;
     public UUID conqueredFrom;
     public int timesConquered;
+    /** Real-world epoch millis until which the claim cannot be captured (0 = no immunity). */
+    public long immuneUntil;
 
     public String recoveryReason;
 
@@ -52,6 +54,11 @@ public final class ClaimRecord {
         flagX = pos.getX();
         flagY = pos.getY();
         flagZ = pos.getZ();
+    }
+
+    /** Remaining recapture immunity in millis, 0 when none. */
+    public long immunityRemaining(long now) {
+        return immuneUntil > now ? immuneUntil - now : 0L;
     }
 
     /** Raid rules and capture apply to ACTIVE and RECOVERY_REQUIRED claims. */

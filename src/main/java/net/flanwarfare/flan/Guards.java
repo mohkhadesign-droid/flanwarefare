@@ -68,7 +68,10 @@ public final class Guards {
         }
         boolean wanted;
         if (permission == PermissionRegistry.EXPLOSIONS) {
-            wanted = ExplosionRules.allowed(ExplosionRules.current());
+            // Block damage: per explosion source. Entity damage (animals, villagers...): its own option.
+            wanted = ExplosionRules.inDetonation()
+                    ? ExplosionRules.allowed(ExplosionRules.current())
+                    : WarConfig.ALLOW_EXPLOSION_ENTITY_DAMAGE.get();
         } else if (permission == PermissionRegistry.FIRESPREAD) {
             wanted = WarConfig.ALLOW_FIRE_SPREAD.get();
         } else if (permission == PermissionRegistry.PISTONBORDER) {

@@ -41,6 +41,9 @@ public final class WarData {
         List<OrphanFlag> orphanFlags = new ArrayList<>();
         Map<UUID, List<AlertEntry>> alertHistory = new HashMap<>();
         List<UUID> mutedAlerts = new ArrayList<>();
+        /** The current season (possibly ended but not yet archived); null between seasons. */
+        Season season;
+        int seasonCounter;
     }
 
     private static final int MAX_ALERTS_PER_PLAYER = 20;
@@ -217,6 +220,52 @@ public final class WarData {
         }
         dirty = true;
         return list;
+    }
+
+    public Season season() {
+        return state.season;
+    }
+
+    public void setSeason(Season season) {
+        state.season = season;
+        dirty = true;
+    }
+
+    /** Next season id: S1, S2, ... (never reused). */
+    public String nextSeasonId() {
+        state.seasonCounter++;
+        dirty = true;
+        return "S" + state.seasonCounter;
+    }
+
+    public int seasonCounter() {
+        return state.seasonCounter;
+    }
+
+    /** Writes any object as JSON with an atomic replace (used for season archives). */
+    public static void writeJson(Path target, Object value) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+            GSON.toJson(value, writer);
+        }
+        try {
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    public static <T> T readJson(Path source, Class<T> type) throws IOException {
+        try (Reader reader = Files.newBufferedReader(source, StandardCharsets.UTF_8)) {
+            T value = GSON.fromJson(reader, type);
+            if (value == null) {
+                throw new IOException("empty file: " + source);
+            }
+            return value;
+        } catch (JsonParseException e) {
+            throw new IOException("corrupted file: " + source, e);
+        }
     }
 
     public boolean isMuted(UUID player) {

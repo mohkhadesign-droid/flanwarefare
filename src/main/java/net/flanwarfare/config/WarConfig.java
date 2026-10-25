@@ -105,6 +105,7 @@ public final class WarConfig {
     public static final ForgeConfigSpec.ConfigValue<String> AURA_IDLE_COLOR;
     public static final ForgeConfigSpec.ConfigValue<String> AURA_ACTIVE_COLOR;
     public static final ForgeConfigSpec.ConfigValue<String> AURA_CONTESTED_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> AURA_IMMUNE_COLOR;
 
     // raid_notifications
     public static final ForgeConfigSpec.BooleanValue ALERTS_ENABLED;
@@ -125,6 +126,19 @@ public final class WarConfig {
     public static final ForgeConfigSpec.BooleanValue ALLOW_CONQUERED_RESIZE;
     public static final ForgeConfigSpec.IntValue MAX_CONQUERED_PER_PLAYER;
     public static final ForgeConfigSpec.BooleanValue USE_FTB_TEAMS;
+    public static final ForgeConfigSpec.DoubleValue RECAPTURE_IMMUNITY_HOURS;
+
+    // leaderboard
+    public static final ForgeConfigSpec.BooleanValue LB_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue LB_TRACK_DEFENSES;
+    public static final ForgeConfigSpec.BooleanValue LB_KINGDOMS;
+    public static final ForgeConfigSpec.BooleanValue LB_KINGDOMS_PARTIES_ONLY;
+    public static final ForgeConfigSpec.BooleanValue LB_WAR_HISTORY;
+    public static final ForgeConfigSpec.IntValue DEFENSE_MIN_PERCENT;
+    public static final ForgeConfigSpec.IntValue DEFENSE_COOLDOWN_MINUTES;
+    public static final ForgeConfigSpec.IntValue PAGE_SIZE;
+    public static final ForgeConfigSpec.ConfigValue<String> SEASON_NAME;
+    public static final ForgeConfigSpec.ConfigValue<String> TIME_ZONE;
 
     // general
     public static final ForgeConfigSpec.BooleanValue PREVENT_SLEEP_SKIP;
@@ -174,8 +188,10 @@ public final class WarConfig {
                 .define("allow_projectiles_and_pearls", true);
         ALLOW_ENTITY_DAMAGE = b.comment("Flan HURTANIMAL, BREAKNONLIVING (item frames, minecarts, boats), ARMORSTAND, ITEMFRAMEROTATE.")
                 .define("allow_entity_damage", true);
-        ALLOW_PVP = b.comment("Flan HURTPLAYER for everyone in raidable claims, so raiders and defenders can fight.")
-                .define("allow_pvp", true);
+        ALLOW_PVP = b.comment("Flan HURTPLAYER for everyone in raidable claims during raids, so raiders and defenders",
+                        "can fight anywhere in the claim (melee, projectiles, and modded weapons that credit the attacker).",
+                        "This never overrides the server-wide pvp=false setting or other mods' protections.")
+                .define("allow_pvp_during_raids", true);
         ALLOW_BUCKETS = b.comment("Flan BUCKET (placing/taking fluids).").define("allow_buckets", false);
         EXTRA_RAID_PERMISSIONS = b.comment("Any other Flan permission IDs to open during raids, e.g. [\"BED\", \"BOAT\"].",
                 "Management permissions (EDITCLAIM, EDITPERMS, EDITPOTIONS) are always ignored here.")
@@ -197,7 +213,8 @@ public final class WarConfig {
                         "Forge's explosion event are not covered.")
                 .define("allow_modded_explosions", true);
         ALLOW_EXPLOSION_ENTITY_DAMAGE = b.comment("Explosions may hurt entities inside raidable claims during raids.",
-                        "Flan 1.7.2 itself never protects entities from explosions; false adds that protection during raids.")
+                        "Flan 1.7.2 normally shields animals, villagers and other passive entities in claims from explosions;",
+                        "true lifts that during raids. false keeps it and also shields players and monsters in raidable claims.")
                 .define("allow_explosion_entity_damage", true);
         ALLOW_FIRE_SPREAD = b.comment("Flan FIRESPREAD.").define("allow_fire_spread", false);
         ALLOW_PISTONS = b.comment("Flan PISTONBORDER: pistons pushing across the claim border.").define("allow_pistons", false);
@@ -236,7 +253,8 @@ public final class WarConfig {
         b.pop();
 
         b.comment("Territory capture.").push("capture");
-        CAPTURE_SECONDS = b.defineInRange("duration_seconds", 180, 5, 3600);
+        CAPTURE_SECONDS = b.comment("Seconds of uncontested capture time needed. Contested time never counts.")
+                .defineInRange("duration_seconds", 90, 5, 3600);
         CAPTURE_RADIUS = b.comment("THE capture radius: horizontal distance from the flag's centre, in blocks.",
                         "Used for capture detection, defender contesting, the particle aura and the action-bar distance.",
                         "Players also need to be between 1 block below and radius+1 blocks above the flag's base.")
@@ -283,6 +301,8 @@ public final class WarConfig {
         AURA_IDLE_COLOR = b.comment("Colours as #RRGGBB.").define("idle_color", "#C8C8C8", WarConfig::isColor);
         AURA_ACTIVE_COLOR = b.define("active_color", "#FF2020", WarConfig::isColor);
         AURA_CONTESTED_COLOR = b.define("contested_color", "#FFD000", WarConfig::isColor);
+        AURA_IMMUNE_COLOR = b.comment("Ring colour while the claim has recapture immunity.")
+                .define("immune_color", "#3C8CFF", WarConfig::isColor);
         b.pop();
 
         b.comment("Live alerts when a specific claim is attacked. These are separate from the raid-window announcements.",
@@ -311,11 +331,37 @@ public final class WarConfig {
         b.comment("SECURITY SENSITIVE. Conquest rules.").push("conquest");
         ALLOW_CONQUERED_RESIZE = b.comment("Allow resizing conquered claims (they would remain free). Default: prohibited.")
                 .define("allow_conquered_claim_resize", false);
-        MAX_CONQUERED_PER_PLAYER = b.comment("Maximum conquered claims one player may own. -1 = unlimited.",
-                "A capture that would exceed it is not completed.")
-                .defineInRange("max_conquered_claims_per_player", -1, -1, 10000);
+        MAX_CONQUERED_PER_PLAYER = b.comment("Maximum conquered claims one player may own at once, all dimensions combined. -1 = unlimited.",
+                        "Players at the limit cannot capture; a teammate can. Lowering it never removes claims.")
+                .defineInRange("max_conquered_claims_per_player", 3, -1, 10000);
+        RECAPTURE_IMMUNITY_HOURS = b.comment("Real-world hours after a conquest during which the claim cannot be captured again.",
+                        "It can still be raided. Counts while the server is offline; Minecraft time has no effect.",
+                        "Changing it affects future conquests only. 0 = no immunity.")
+                .defineInRange("recapture_immunity_hours", 24.0, 0.0, 8760.0);
         USE_FTB_TEAMS = b.comment("Use FTB Teams parties as attacking sides. Without FTB Teams (or when false) every player is their own side.")
                 .define("use_ftb_teams", true);
+        b.pop();
+
+        b.comment("Season statistics, leaderboards and war history. Statistics never change gameplay ownership.")
+                .push("leaderboard");
+        LB_ENABLED = b.comment("Record season events (conquests, defenses, losses) and enable the statistics commands.")
+                .define("enabled", true);
+        LB_TRACK_DEFENSES = b.define("track_successful_defenses", true);
+        LB_KINGDOMS = b.comment("Kingdom rankings, based on FTB Teams.").define("track_kingdom_stats", true);
+        LB_KINGDOMS_PARTIES_ONLY = b.comment("Only FTB Teams parties count as kingdoms; solo players have no kingdom.",
+                        "If the team type cannot be detected, every team counts.")
+                .define("kingdoms_are_parties_only", true);
+        LB_WAR_HISTORY = b.comment("Enable /war log.").define("record_war_history", true);
+        DEFENSE_MIN_PERCENT = b.comment("A repelled capture counts as a defense only if it reached this percentage.")
+                .defineInRange("defense_minimum_capture_percent", 10, 1, 100);
+        DEFENSE_COOLDOWN_MINUTES = b.comment("Anti-farming: at most one credited defense per claim within this many real minutes.")
+                .defineInRange("defense_cooldown_minutes", 30, 0, 1440);
+        PAGE_SIZE = b.defineInRange("default_page_size", 10, 3, 30);
+        SEASON_NAME = b.comment("Name of the first season, created automatically on first start.",
+                        "Later seasons are named with /war admin season start <name>.")
+                .define("season_name", "The Grand Expedition - Season 1");
+        TIME_ZONE = b.comment("Time zone for timestamps in /war log, e.g. \"America/New_York\". Empty = the server's zone.")
+                .define("time_zone", "", WarConfig::isZone);
         b.pop();
 
         b.push("general");
@@ -342,6 +388,32 @@ public final class WarConfig {
         } catch (IllegalArgumentException e) {
             return false;
         }
+    }
+
+    private static boolean isZone(Object value) {
+        if (!(value instanceof String)) {
+            return false;
+        }
+        String zone = ((String) value).trim();
+        if (zone.isEmpty()) {
+            return true;
+        }
+        try {
+            java.time.ZoneId.of(zone);
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    public static java.time.ZoneId zone() {
+        String zone = TIME_ZONE.get().trim();
+        return zone.isEmpty() ? java.time.ZoneId.systemDefault() : java.time.ZoneId.of(zone);
+    }
+
+    /** Recapture immunity length in milliseconds (0 = disabled). */
+    public static long immunityMillis() {
+        return (long) (RECAPTURE_IMMUNITY_HOURS.get() * 3_600_000.0);
     }
 
     private static boolean isColor(Object value) {

@@ -9,6 +9,7 @@ import io.github.flemmli97.flan.claim.Claim;
 import io.github.flemmli97.flan.player.PlayerClaimData;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.config.WarConfig.RaidMode;
+import net.flanwarfare.conquest.ConquestService;
 import net.flanwarfare.core.WarCore;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.data.ClaimState;
@@ -208,6 +209,10 @@ public final class WarCommand {
         reply(ctx, "Claims: " + active + " active, " + pending + " without flag, " + recovery
                 + " needing recovery, " + conquered + " conquered. Captures running: " + core.capture().activeCount());
         reply(ctx, "Teams: " + core.sides().status());
+        net.flanwarfare.data.Season season = core.stats().season();
+        reply(ctx, season == null ? "Season: none - statistics are NOT being recorded (/war admin season start <name>)."
+                : "Season " + season.id + " \"" + season.name + "\": " + (season.isActive() ? "running" : "ended, not recording")
+                + ", " + season.events.size() + " events.");
         for (String id : recoveryIds) {
             reply(ctx, "Needs recovery: " + id);
         }
@@ -445,12 +450,11 @@ public final class WarCommand {
         if (record == null) {
             return 0;
         }
-        String problem = core.conquest().rollback(record.claimId, ctx.getSource().getName());
-        if (problem != null) {
-            return fail(ctx, problem);
+        ConquestService.RollbackResult result = core.conquest().rollback(record.claimId, ctx.getSource().getName());
+        if (!result.ok) {
+            return fail(ctx, result.message);
         }
-        reply(ctx, "Conquest rolled back: ownership returned to " + FlanBridge.playerName(core.server(), record.owner)
-                + ". Previous members and subclaims are not restored.");
+        reply(ctx, "Conquest rolled back. " + result.message);
         return 1;
     }
 }

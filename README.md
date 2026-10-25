@@ -2,7 +2,8 @@
 
 Server-side Forge 1.16.5 add-on for **Flan 1.16.5-1.7.2** that adds scheduled raid windows,
 mandatory claim flags, contested territory capture with a visible capture zone, live raid
-alerts, and permanent conquest.
+alerts, permanent conquest with limits and recapture immunity, and season leaderboards with a
+war history.
 
 - Players do **not** install anything. The mod registers no blocks, items or network channels.
   Banners, particles, boss bars, titles and sounds are all vanilla.
@@ -10,8 +11,8 @@ alerts, and permanent conquest.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and the
-> automated logic tests). The in-game behaviour has **not** been tested on a server yet.
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 112
+> automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
 ---
@@ -57,7 +58,9 @@ who is not the owner or a Flan member of an ordinary claim can genuinely raid it
 - use doors, trapdoors, gates, buttons, levers, pressure plates, crafting stations and machines;
 - throw ender pearls and shoot projectiles;
 - hurt animals and break item frames and armour stands;
-- fight players. PvP is opened for both sides, so defenders can fight back.
+- fight players anywhere in the claim, with melee, bows, crossbows and modded weapons that credit the
+  attacker. Defenders can fight back too. PvP returns to normal when the raid ends, and the
+  server-wide `pvp=false` setting is never overridden.
 
 Explosions also damage raidable claims: TNT, creepers, other vanilla explosions and modded
 explosions each have their own switch. They are filtered **block by block**. In an explosion
@@ -84,7 +87,8 @@ players, from one shared setting. Its colour shows the state:
 A burst of particles marks a conquest. Players near the zone also get an action-bar readout,
 e.g. `Capture Zone - 1.4 / 2.0 blocks from flag - INSIDE`.
 
-During a raid, an enemy standing inside the zone fills a boss bar over 180 seconds.
+During a raid, an enemy standing inside the zone fills a boss bar over **90 seconds** of
+uncontested time. Time spent contested never counts.
 
 - **Defending is just standing there.** As soon as the owner, or another defender, is inside the
   zone, progress pauses and the bar says **CONTESTED**. It stays paused until every defender has
@@ -125,6 +129,48 @@ potion effects are removed, and the home moves to the flag. The flag stays where
 the conqueror's banner design. Conquered land costs no claim blocks and no claim slot, and it
 cannot be resized or transferred.
 
+**Limit: 3 conquered claims per player** at once, all dimensions combined. A player at the limit
+sees "Conquest Limit Reached!" and cannot capture, but a teammate standing with them can, and
+the claim goes to that teammate. Losing, deleting or abandoning a conquered claim frees a slot.
+`/war claims` shows your conquered claims, free slots and immunity. Lowering the limit never
+removes anyone's claims.
+
+**Recapture immunity: 24 real-world hours** after a conquest, nobody can capture that claim:
+
+- The ring turns blue, and attackers stepping in see "This territory is immune to conquest.
+  Recapture available in: 17h 42m".
+- The owner gets no capture alert.
+- The claim can still be raided normally: break, loot, TNT and PvP all work, and raid alerts
+  still go out.
+
+The timer runs on real time, so it keeps counting while the server is offline, and `/time` or
+sleeping has no effect. It survives restarts and flag moves.
+
+### Season leaderboard and war history
+
+The mod keeps season statistics from actual conquests and defenses:
+
+- **Successful conquests** count permanently, even if the claim is later lost.
+- **Successful defenses** count only when all of these happen:
+  - the capture reached at least 10%;
+  - a defender stood in the zone while an attacker was there;
+  - the attackers left or died;
+  - the bar drained to zero without being captured.
+
+  A raid ending with attackers still at the flag doesn't count, and one claim can earn at most
+  one defense per 30 minutes. Every defender who contested gets personal credit, but their
+  kingdom gets only one defense.
+- **Territory held** (conquered and total) comes from current Flan ownership.
+- **Territories lost** counts claims taken from you.
+
+Kingdoms are FTB Teams parties. Each event remembers the kingdom at the time, so switching teams
+later doesn't rewrite history. Use `/war leaderboard`, `/war stats` and `/war log` to view them
+(commands below).
+
+Seasons are started, ended and archived by admins. Archived seasons stay viewable with
+`/war seasons`. Resetting or ending a season never touches claims, owners, slots, immunity or
+flags.
+
 ### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
@@ -157,6 +203,12 @@ cannot be resized or transferred.
 | `/war status` | Whether a raid is active and when the next change happens. |
 | `/war capture` | Captures on your claims or within 64 blocks. |
 | `/war alerts on` / `off` | Unmute or mute live raid alerts for yourself. |
+| `/war claims` | Your conquered claims, free conquest slots, and remaining immunity. |
+| `/war leaderboard` `[players\|kingdoms\|defenses\|territory]` `[page]` | Season rankings (players by conquests, then defenses, then held). |
+| `/war stats [player]` | Season statistics for you or another player. |
+| `/war log [page]` | Recent war history (conquests, defenses, losses, reversals). |
+| `/war log player <player>` / `claim` / `kingdom <kingdom>` `[page]` | History filtered by player, the claim you stand in, or kingdom. |
+| `/war seasons [<id> [log [page]]]` | Archived seasons: final rankings and their war log. |
 
 **Flag placement rules:**
 
@@ -182,7 +234,14 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin claim inspect [<claim>]` | State, live state, owners, flag block, accounting and the conquest journal. Without an argument it uses the claim you stand in. |
 | `/war admin claim repair <claim>` | Re-sync with Flan, retry interrupted conquests and restore the flag. |
 | `/war admin capture cancel <claim>` | Stop a capture in progress (the owner is told). |
-| `/war admin conquest rollback <claim>` | Give the claim back to its previous owner. Members and subclaims are not restored. |
+| `/war admin conquest rollback <claim>` | Give the claim back to its previous owner and restore its previous immunity. The conquest stays in the war log marked "reversed" and no longer counts in statistics. Members and subclaims are not restored. |
+| `/war admin claims <player>` | Another player's conquered claims and slots. |
+| `/war admin immunity inspect\|clear [<claim>]` | Show or remove recapture immunity (default: the claim you stand in). |
+| `/war admin immunity set <duration> [<claim>]` | Set immunity, e.g. `24h`, `90m`, `1d12h`, `0`. |
+| `/war admin season info` | Current season, recording state, archives. |
+| `/war admin season start <name>` / `end` / `archive` | Season lifecycle (start archives a finished season automatically). |
+| `/war admin season reset confirm` | Clear the current season's statistics after writing a backup archive. |
+| `/war admin stats check` | Reconcile statistics with Flan and the conquest journal; removes duplicate events and reports problems. |
 
 `<claim>` is the Flan claim UUID; press Tab to complete it. Operators who switch on Flan's own
 admin mode can still manage inactive claims through Flan.
@@ -200,7 +259,7 @@ values are:
 | `raid.start_time` / `end_time` | `15:00` / `06:00` | In-game time. 06:00 = tick 0, 15:00 = 9000, 00:00 = 18000. Windows may cross midnight. |
 | `raid.permissions.allow_breaking` / `allow_placing` / `allow_containers` | `true` | Flan `BREAK`, `PLACE`, `OPENCONTAINER` (opening and looting are one Flan permission) |
 | `raid.permissions.allow_doors_and_trapdoors` / `allow_redstone_interactions` / `allow_block_interactions` | `true` | Doors, gates; buttons, levers, plates, redstone; crafting stations and machines (`INTERACTBLOCK`) |
-| `raid.permissions.allow_projectiles_and_pearls` / `allow_entity_damage` / `allow_pvp` | `true` | |
+| `raid.permissions.allow_projectiles_and_pearls` / `allow_entity_damage` / `allow_pvp_during_raids` | `true` | |
 | `raid.permissions.allow_buckets` | `false` | Fluid placing |
 | `raid.permissions.extra_permissions` | `[]` | Any other Flan permission IDs, e.g. `["BED"]` |
 | `raid.world_effects.allow_tnt_explosions` / `creeper` / `other` / `modded` | `true` | Block damage per explosion source |
@@ -213,7 +272,7 @@ values are:
 | `flags.auto_abandon_expired_claims` | `false` | Delete expired claims through Flan |
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
 | `capture.radius_blocks` | `2.0` | **The** capture radius: detection, contesting, aura and distance readout |
-| `capture.duration_seconds` / `decay_seconds` | `180` / `60` | |
+| `capture.duration_seconds` / `decay_seconds` | `90` / `60` | Uncontested capture time / full-bar decay |
 | `capture.contest_by_rival_attackers` | `true` | |
 | `capture.defenders.enabled` / `owner_can_contest` / `team_members_defend` | `true` | |
 | `capture.defenders.trusted_defenders` | `MANAGERS` | `MANAGERS`, `ALL_MEMBERS` or `NONE` |
@@ -226,7 +285,16 @@ values are:
 | `raid_notifications.ordinary_raid_cooldown_seconds` | `45` | |
 | `raid_notifications.capture_start_high_priority` / `offline_raid_summary` | `true` | |
 | `conquest.allow_conquered_claim_resize` | `false` | |
-| `conquest.max_conquered_claims_per_player` | `-1` | Unlimited |
+| `conquest.max_conquered_claims_per_player` | `3` | `-1` = unlimited |
+| `conquest.recapture_immunity_hours` | `24` | Real-world hours, `0` = off; affects future conquests |
+| `capture_aura.immune_color` | blue | Ring colour during immunity |
+| `leaderboard.enabled` / `track_successful_defenses` / `track_kingdom_stats` / `record_war_history` | `true` | |
+| `leaderboard.kingdoms_are_parties_only` | `true` | Solo FTB players have no kingdom |
+| `leaderboard.defense_minimum_capture_percent` | `10` | |
+| `leaderboard.defense_cooldown_minutes` | `30` | Anti-farming |
+| `leaderboard.default_page_size` | `10` | |
+| `leaderboard.season_name` | `The Grand Expedition - Season 1` | First season only |
+| `leaderboard.time_zone` | server zone | e.g. `America/New_York` for log timestamps |
 | `conquest.use_ftb_teams` | `true` | |
 | `general.prevent_sleep_time_skip_during_raids` | `true` | |
 
@@ -266,5 +334,9 @@ Fixed rules (deliberately not configurable, for safety):
   journal. It cannot recreate the claim by itself.
 - **Recaptured conquered land stays free.** A claim is free for whoever owns it once it has been
   conquered, including its original owner if they retake it.
+- **Statistics start when the mod is installed.** Conquests made while statistics were disabled
+  are reported by `/war admin stats check` but never invented afterwards.
+- **Kingdom names** come from FTB Teams via reflection. If the team type or name can't be
+  read, `/war admin status` says so and teams are shown by a short id.
 - **Scoreboard:** Flan's scoreboard criterion for used claim blocks does not subtract conquered
   land. Flan's own block checks and `/flan` messages do.

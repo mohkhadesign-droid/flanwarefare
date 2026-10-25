@@ -14,6 +14,7 @@ import net.flanwarfare.flan.Accounting;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.flan.Guards;
 import net.flanwarfare.mixin.ClaimAccessor;
+import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.potion.Effect;
@@ -57,8 +58,29 @@ public final class ConquestService {
         this.core = core;
     }
 
-    /** Completes a capture. Returns true if ownership changed. */
-    public boolean complete(Claim claim, ClaimRecord record, UUID winner, Set<UUID> present) {
+    /** Conquest slots: true if the player may own one more conquered claim. */
+    public boolean hasConquestSlot(UUID player) {
+        int max = WarConfig.MAX_CONQUERED_PER_PLAYER.get();
+        return max < 0 || Accounting.conqueredCount(core.server(), player) < max;
+    }
+
+    /** The three-line message shown to a player at the conquest limit. */
+    public void sendLimitMessage(ServerPlayerEntity player) {
+        int max = WarConfig.MAX_CONQUERED_PER_PLAYER.get();
+        int count = Accounting.conqueredCount(core.server(), player.getUniqueID());
+        Msg.send(player, Msg.text("Conquest Limit Reached!", net.minecraft.util.text.TextFormatting.RED)
+                .mergeStyle(net.minecraft.util.text.TextFormatting.BOLD));
+        Msg.send(player, Msg.text("You currently own " + count + " / " + max + " conquered territories.",
+                net.minecraft.util.text.TextFormatting.YELLOW));
+        Msg.send(player, Msg.text("Lose or abandon a conquered claim before capturing another.",
+                net.minecraft.util.text.TextFormatting.YELLOW));
+    }
+
+    /**
+     * Completes a capture. {@code participants} are the capturing side's players at the flag
+     * (recorded in history). Returns true if ownership changed.
+     */
+    public boolean complete(Claim claim, ClaimRecord record, UUID winner, Set<UUID> present, Set<UUID> participants) {
         ServerPlayerEntity capturer = core.server().getPlayerList().getPlayerByUUID(winner);
         String problem = null;
         if (!core.raid().isActive()) {
@@ -71,11 +93,11 @@ public final class ConquestService {
             problem = "the capturer already owns the claim";
         } else if (locked != null) {
             problem = "another conquest is in progress";
-        } else {
-            int max = WarConfig.MAX_CONQUERED_PER_PLAYER.get();
-            if (max >= 0 && Accounting.conqueredCount(core.server(), winner) >= max) {
-                problem = "the capturer already holds the maximum of " + max + " conquered claims";
-            }
+        } else if (record.immunityRemaining(System.currentTimeMillis()) > 0) {
+            problem = "the territory is immune to conquest";
+        } else if (!hasConquestSlot(winner)) {
+            sendLimitMessage(capturer);
+            problem = "the capturer is at the conquest limit";
         }
         if (problem != null) {
             Msg.send(capturer, Msg.error("Capture could not be completed: " + problem + "."));
@@ -96,6 +118,30 @@ public final class ConquestService {
         txn.snapshotJson = claim.toJson(new JsonObject()).toString();
         txn.startedAt = System.currentTimeMillis();
         txn.phase = ConquestTxn.Phase.PENDING;
+        txn.previousImmuneUntil = record.immuneUntil;
+        txn.claimLabel = FlanBridge.label(claim);
+        int[] bounds = claim.getDimensions();
+        txn.x = record.hasFlag ? record.flagX : (bounds[0] + bounds[1]) / 2;
+        txn.z = record.hasFlag ? record.flagZ : (bounds[2] + bounds[3]) / 2;
+        txn.oldOwnerName = FlanBridge.playerName(core.server(), oldOwner);
+        txn.newOwnerName = FlanBridge.playerName(core.server(), winner);
+        SideResolver.Kingdom oldKingdom = core.sides().kingdomOf(oldOwner);
+        SideResolver.Kingdom newKingdom = core.sides().kingdomOf(winner);
+        if (oldKingdom != null) {
+            txn.oldKingdomId = oldKingdom.id;
+            txn.oldKingdomName = oldKingdom.name;
+        }
+        if (newKingdom != null) {
+            txn.newKingdomId = newKingdom.id;
+            txn.newKingdomName = newKingdom.name;
+        }
+        Set<UUID> credited = new java.util.LinkedHashSet<>();
+        credited.add(winner);
+        credited.addAll(participants);
+        for (UUID id : credited) {
+            txn.participants.add(id);
+            txn.participantNames.add(FlanBridge.playerName(core.server(), id));
+        }
 
         locked = record.claimId;
         try {
@@ -128,6 +174,8 @@ public final class ConquestService {
             });
             txn.phase = ConquestTxn.Phase.COMMITTED;
             txn.finishedAt = System.currentTimeMillis();
+            // Same atomic write as COMMITTED: the statistics entry exists exactly once.
+            core.stats().recordConquest(txn);
             core.data().markDirty();
             core.saveNow();
             core.audit("CONQUEST {}: claim {} ({}) transferred from {} to {}", txn.txnId, record.claimId, record.dimension,
@@ -183,6 +231,8 @@ public final class ConquestService {
         record.conqueredFrom = txn.oldOwner;
         if (txn.phase == ConquestTxn.Phase.PENDING) {
             record.timesConquered++;
+            long immunity = WarConfig.immunityMillis();
+            record.immuneUntil = immunity > 0 ? txn.startedAt + immunity : 0L;
         }
         record.state = ClaimState.ACTIVE;
         record.recoveryReason = null;
@@ -222,6 +272,8 @@ public final class ConquestService {
                 });
                 txn.phase = ConquestTxn.Phase.COMMITTED;
                 txn.note = "completed during startup recovery";
+                txn.finishedAt = System.currentTimeMillis();
+                core.stats().recordConquest(txn);
                 FlanWarfare.LOG.warn("Interrupted conquest {} of claim {} completed during recovery", txn.txnId, txn.claimId);
             } else if (txn.oldOwner.equals(claim.getOwner())) {
                 txn.phase = ConquestTxn.Phase.ABORTED;
@@ -258,27 +310,39 @@ public final class ConquestService {
      * and banner design go back. The previous members, groups and subclaims are NOT restored
      * (they are kept in the journal snapshot for reference only).
      */
-    public String rollback(UUID claimId, String adminName) {
+    /** Outcome of an administrator rollback. */
+    public static final class RollbackResult {
+        public final boolean ok;
+        public final String message;
+
+        RollbackResult(boolean ok, String message) {
+            this.ok = ok;
+            this.message = message;
+        }
+    }
+
+    public RollbackResult rollback(UUID claimId, String adminName) {
         ConquestTxn txn = lastCommitted(claimId);
         if (txn == null) {
-            return "No committed conquest is recorded for this claim.";
+            return new RollbackResult(false, "No committed conquest is recorded for this claim.");
         }
         ClaimRecord record = core.data().claim(claimId);
         Claim claim = record == null ? null : FlanBridge.find(core.server(), record);
         if (claim == null) {
-            return "The claim no longer exists.";
+            return new RollbackResult(false, "The claim no longer exists.");
         }
         if (!txn.newOwner.equals(claim.getOwner())) {
-            return "The claim's owner changed since that conquest; refusing to roll back automatically.";
+            return new RollbackResult(false, "The claim's owner changed since that conquest; refusing to roll back automatically.");
         }
         ServerWorld world = claim.getWorld();
         boolean moved = Guards.bypass(() -> ClaimStorage.get(world).transferOwner(claim,
                 FakePlayerFactory.get(world, new GameProfile(claim.getOwner(), "[FlanWarfare]")), txn.oldOwner));
         if (!moved) {
-            return "Flan refused the transfer.";
+            return new RollbackResult(false, "Flan refused the transfer.");
         }
         record.owner = txn.oldOwner;
         record.conquered = txn.wasConqueredBefore;
+        record.immuneUntil = txn.previousImmuneUntil;
         record.designSnbt = txn.previousDesign;
         core.flags().showDesign(record);
         Guards.bypass(() -> {
@@ -287,9 +351,11 @@ public final class ConquestService {
         });
         txn.phase = ConquestTxn.Phase.ROLLED_BACK;
         txn.note = "rolled back by " + adminName;
+        String statsNote = core.stats().reverseConquest(txn.txnId, adminName);
         core.data().markDirty();
         core.saveNow();
-        core.audit("Conquest {} of claim {} rolled back by {}", txn.txnId, claimId, adminName);
-        return null;
+        core.audit("Conquest {} of claim {} rolled back by {} ({})", txn.txnId, claimId, adminName, statsNote);
+        return new RollbackResult(true, "Ownership returned to " + FlanBridge.playerName(core.server(), txn.oldOwner)
+                + "; previous immunity restored. Previous members and subclaims are not restored. " + statsNote);
     }
 }

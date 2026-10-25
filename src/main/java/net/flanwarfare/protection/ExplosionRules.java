@@ -42,6 +42,15 @@ public final class ExplosionRules {
         return source == null ? Source.OTHER : source;
     }
 
+    /**
+     * True while Flan filters an explosion's block list. Flan also asks the same EXPLOSIONS
+     * question (null player) from its LivingDamageEvent handler when an explosion hurts a
+     * non-player, non-monster entity; that happens after Detonate, outside this context.
+     */
+    public static boolean inDetonation() {
+        return CURRENT.get() != null;
+    }
+
     static Source classify(Explosion explosion) {
         Entity exploder = explosion.getExploder();
         if (exploder == null) {

@@ -26,7 +26,8 @@ import java.util.Map;
  * being nearby means the chunk is loaded already). The ring uses exactly the configured
  * {@code capture.radius_blocks} and {@link CaptureZone}, the same as capture detection.
  *
- * <p>Colours: idle (grey), being captured or decaying (red), contested (yellow), and a totem
+ * <p>Colours: idle (grey), being captured or decaying (red), contested (yellow), recapture
+ * immunity (blue), and a totem
  * burst when a claim is conquered. Flags of admin claims, excluded claims, disabled dimensions
  * and claims without a placed flag never get a ring.
  */
@@ -71,12 +72,13 @@ public final class CaptureAura {
                     continue;
                 }
                 CaptureModel.Status status = core.capture().statusOf(record.claimId);
-                String color = colorFor(status);
+                long immunity = record.immunityRemaining(System.currentTimeMillis());
+                String color = immunity > 0 ? WarConfig.AURA_IMMUNE_COLOR.get() : colorFor(status);
                 if (color != null) {
                     drawRing(world, viewers, record, radius, color);
                 }
                 if (raid && WarConfig.AURA_ACTIONBAR.get()) {
-                    distanceHints(viewers, record, radius, status);
+                    distanceHints(viewers, record, radius, status, immunity);
                 }
             }
         }
@@ -110,7 +112,7 @@ public final class CaptureAura {
 
     /** Action-bar distance readout for players at or near the zone edge. */
     private static void distanceHints(List<ServerPlayerEntity> viewers, ClaimRecord record, double radius,
-                                      CaptureModel.Status status) {
+                                      CaptureModel.Status status, long immunity) {
         for (ServerPlayerEntity player : viewers) {
             if (!CaptureManager.canTakePart(player)
                     || !CaptureZone.withinHeight(player.getPosY(), record.flagY, radius)) {
@@ -121,6 +123,11 @@ public final class CaptureAura {
                 continue;
             }
             boolean inside = distance <= radius;
+            if (immunity > 0) {
+                Msg.actionBar(player, Msg.text(String.format(Locale.ROOT,
+                        "Capture Zone - IMMUNE to conquest - recapture in %s", Msg.duration(immunity)), TextFormatting.AQUA));
+                continue;
+            }
             String text = String.format(Locale.ROOT, "Capture Zone - %.1f / %.1f blocks from flag%s", distance, radius,
                     inside ? (status == CaptureModel.Status.CONTESTED ? " - INSIDE (contested)" : " - INSIDE") : "");
             Msg.actionBar(player, Msg.text(text, inside ? TextFormatting.RED : TextFormatting.GRAY));

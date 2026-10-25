@@ -67,21 +67,33 @@ public final class RaidPermissions {
             return;
         }
 
-        if (record.state == ClaimState.PENDING_FLAG && WarConfig.REQUIRE_FLAG_FOR_PROTECTION.get()) {
+        if (record.state == ClaimState.PENDING_FLAG && WarConfig.REQUIRE_FLAG_FOR_PROTECTION.get()
+                && permission != PermissionRegistry.HURTPLAYER) {
             // Lift restrictions only. Perk permissions (where "allowed" grants a benefit rather
-            // than lifting a restriction) keep Flan's normal answer.
+            // than lifting a restriction) keep Flan's normal answer. PvP is not a building
+            // protection: it follows the raid rules below like any other claim.
             if (!isPerk(permission)) {
                 event.setResult(ActionResultType.SUCCESS);
             }
             return;
         }
 
-        if (!core.raid().isActive() || !record.isWarEnabled()) {
+        if (!core.raid().isActive()) {
             return;
         }
-        // PvP is opened for everyone in a raidable claim, so its members can fight back too.
-        if (permission == PermissionRegistry.HURTPLAYER && core.raid().isRaidPermission(permission)) {
-            event.setResult(ActionResultType.SUCCESS);
+        // PvP (Flan checks HURTPLAYER for the attacker at the victim's position, for melee,
+        // projectiles and any damage credited to a player) is opened during raids for everyone
+        // in a raidable claim, including claims without a flag, so members can fight back too.
+        // Fake players only if fake players are allowed. Server pvp=false still applies.
+        if (permission == PermissionRegistry.HURTPLAYER) {
+            if ((record.isWarEnabled() || record.state == ClaimState.PENDING_FLAG)
+                    && core.raid().isRaidPermission(permission)
+                    && (!(player instanceof FakePlayer) || WarConfig.ALLOW_FAKE_PLAYERS.get())) {
+                event.setResult(ActionResultType.SUCCESS);
+            }
+            return;
+        }
+        if (!record.isWarEnabled()) {
             return;
         }
         UUID id = player.getUniqueID();

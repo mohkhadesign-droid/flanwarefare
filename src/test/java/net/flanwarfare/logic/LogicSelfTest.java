@@ -35,6 +35,12 @@ public final class LogicSelfTest {
         zoneGeometry();
         alertThrottle();
         warStates();
+        ninetySecondCapture();
+        durations();
+        defenseRules();
+        statsExactlyOnce();
+        statsKingdoms();
+        rankingOrder();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -306,6 +312,130 @@ public final class LogicSelfTest {
                 net.flanwarfare.alerts.ClaimWarState.of(null, false, false), "raid window alone is peaceful");
         eq(net.flanwarfare.alerts.ClaimWarState.CONQUERED,
                 net.flanwarfare.alerts.ClaimWarState.of(null, false, true), "conquered when quiet");
+    }
+
+    private static void ninetySecondCapture() {
+        CaptureModel m = new CaptureModel(90 * 20, 60 * 20);
+        run(m, 90, sides("A"), false); // 900 ticks = 45 s
+        run(m, 30, sides("A"), true);  // 15 s contested: must not count
+        run(m, 89, sides("A"), false);
+        eq(CaptureModel.Status.CAPTURING, m.status(), "89.5 s uncontested: not yet");
+        run(m, 1, sides("A"), false);
+        eq(CaptureModel.Status.COMPLETE, m.status(), "90 s of uncontested time completes; contested time excluded");
+    }
+
+    private static void durations() {
+        eq(86_400_000L, DurationParser.parseMillis("24h"), "24h");
+        eq(5_400_000L, DurationParser.parseMillis("90m"), "90m");
+        eq(129_600_000L, DurationParser.parseMillis("1d12h"), "1d12h");
+        eq(0L, DurationParser.parseMillis("0"), "0");
+        boolean threw = false;
+        try {
+            DurationParser.parseMillis("12x");
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "rejects 12x");
+    }
+
+    private static void defenseRules() {
+        long hour = 3_600_000L;
+        check(DefenseRules.qualifies(0.35, 10, 1, false, 0, hour, hour / 2), "qualifying defense");
+        check(!DefenseRules.qualifies(0.09, 10, 2, false, 0, hour, hour / 2), "below 10% threshold");
+        check(DefenseRules.qualifies(0.10, 10, 1, false, 0, hour, hour / 2), "exactly 10% qualifies");
+        check(!DefenseRules.qualifies(0.5, 10, 0, false, 0, hour, hour / 2), "nobody contested");
+        check(!DefenseRules.qualifies(0.5, 10, 1, true, 0, hour, hour / 2), "attackers stayed past raid end");
+        check(!DefenseRules.qualifies(0.5, 10, 1, false, hour - 60_000L, hour, hour / 2), "within anti-farming cooldown");
+    }
+
+    private static net.flanwarfare.data.WarEvent conquest(String id, UUID winner, UUID loser, String winK, String loseK) {
+        net.flanwarfare.data.WarEvent e = new net.flanwarfare.data.WarEvent();
+        e.id = id;
+        e.type = net.flanwarfare.data.WarEvent.CONQUEST;
+        e.newOwner = winner;
+        e.newOwnerName = "w";
+        e.previousOwner = loser;
+        e.previousOwnerName = "l";
+        e.actingKingdomId = winK;
+        e.actingKingdomName = winK;
+        e.previousKingdomId = loseK;
+        e.previousKingdomName = loseK;
+        return e;
+    }
+
+    private static void statsExactlyOnce() {
+        UUID a = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+        UUID b = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        java.util.List<net.flanwarfare.data.WarEvent> events = new java.util.ArrayList<>();
+        events.add(conquest("t1", a, b, null, null));
+        events.add(conquest("t1", a, b, null, null)); // replayed duplicate
+        events.add(conquest("t2", a, b, null, null));
+        net.flanwarfare.data.WarEvent reversed = conquest("t3", a, b, null, null);
+        reversed.reversed = true;
+        events.add(reversed);
+        java.util.List<StatsAggregator.Ownership> now = new java.util.ArrayList<>();
+        now.add(new StatsAggregator.Ownership(a, "a", true, null, null));
+        now.add(new StatsAggregator.Ownership(b, "b", false, null, null));
+        now.add(new StatsAggregator.Ownership(b, "b", false, null, null));
+        StatsAggregator s = StatsAggregator.compute(events, now);
+        eq(2, s.player(a).conquests, "duplicate and reversed conquests not counted");
+        eq(2, s.player(b).lost, "territory lost counted once per conquest");
+        eq(1, s.duplicates(), "duplicate detected");
+        eq(1, s.player(a).conqueredHeld, "conquered held from current ownership");
+        eq(1, s.player(a).totalHeld, "a holds 1 claim");
+        eq(0, s.player(b).conqueredHeld, "ordinary claims are not conquered territory");
+        eq(2, s.player(b).totalHeld, "total includes ordinary claims");
+        check(s.player(a).conquests > s.player(a).conqueredHeld, "historical conquests survive losing territory");
+    }
+
+    private static void statsKingdoms() {
+        UUID d1 = UUID.fromString("00000000-0000-0000-0000-0000000000d1");
+        UUID d2 = UUID.fromString("00000000-0000-0000-0000-0000000000d2");
+        UUID w = UUID.fromString("00000000-0000-0000-0000-0000000000e1");
+        net.flanwarfare.data.WarEvent defense = new net.flanwarfare.data.WarEvent();
+        defense.id = "d1";
+        defense.type = net.flanwarfare.data.WarEvent.DEFENSE;
+        defense.participants.add(d1);
+        defense.participants.add(d2);
+        defense.participants.add(d1); // listed twice: still one credit
+        defense.actingKingdomId = "north";
+        defense.actingKingdomName = "North";
+        java.util.List<net.flanwarfare.data.WarEvent> events = new java.util.ArrayList<>();
+        events.add(defense);
+        events.add(conquest("c1", w, d1, "south", "north"));
+        StatsAggregator s = StatsAggregator.compute(events, Collections.<StatsAggregator.Ownership>emptyList());
+        eq(1, s.player(d1).defenses, "defender credited once");
+        eq(1, s.player(d2).defenses, "second defender credited individually");
+        StatRow north = null;
+        StatRow south = null;
+        for (StatRow k : s.kingdoms(StatRow.BY_CONQUESTS)) {
+            if (k.id.equals("north")) {
+                north = k;
+            } else if (k.id.equals("south")) {
+                south = k;
+            }
+        }
+        eq(1, north.defenses, "kingdom gets one defense per session");
+        eq(1, north.lost, "historical kingdom of loser at event time");
+        eq(1, south.conquests, "historical capturing kingdom");
+    }
+
+    private static void rankingOrder() {
+        StatRow x = new StatRow("x", "X");
+        x.conquests = 3;
+        x.defenses = 1;
+        StatRow y = new StatRow("y", "Y");
+        y.conquests = 3;
+        y.defenses = 2;
+        StatRow z = new StatRow("a", "Z");
+        z.conquests = 1;
+        z.totalHeld = 9;
+        java.util.List<StatRow> rows = new java.util.ArrayList<>(java.util.Arrays.asList(z, x, y));
+        rows.sort(StatRow.BY_CONQUESTS);
+        eq("y", rows.get(0).id, "conquests tie broken by defenses");
+        eq("x", rows.get(1).id, "second");
+        rows.sort(StatRow.BY_TERRITORY);
+        eq("a", rows.get(0).id, "territory ranking by total held");
     }
 
     private static Set<UUID> set(UUID... ids) {

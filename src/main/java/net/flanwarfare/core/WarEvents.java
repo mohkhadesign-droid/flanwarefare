@@ -2,6 +2,7 @@ package net.flanwarfare.core;
 
 import io.github.flemmli97.flan.api.forge.PermissionCheckEvent;
 import net.flanwarfare.command.FlagCommand;
+import net.flanwarfare.command.StatsCommand;
 import net.flanwarfare.command.WarCommand;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.data.ClaimRecord;
@@ -58,6 +59,7 @@ public final class WarEvents {
     public void onRegisterCommands(RegisterCommandsEvent event) {
         FlagCommand.register(event.getDispatcher());
         WarCommand.register(event.getDispatcher());
+        StatsCommand.register(event.getDispatcher());
     }
 
     @SubscribeEvent

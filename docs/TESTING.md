@@ -39,7 +39,14 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 | 50 blocks broken in 25 s: 1 title, at most 1 hint per 5 s; new title after cooldown; contest throttle | `alertThrottle` | 1 title, 4 hints | **PASS** |
 | Live state derivation (capture beats raid activity; raid window alone is PEACEFUL) | `warStates` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 83 checks passed` (locally, and on every GitHub
+| 90 s of uncontested time completes; 15 s of contest in the middle does not count | `ninetySecondCapture` | completes at exactly 90 s uncontested | **PASS** |
+| Immunity durations: 24h, 90m, 1d12h, 0; invalid input rejected | `durations` | as specified | **PASS** |
+| Defense qualification: threshold (incl. exactly 10%), contest required, raid-end-with-attackers excluded, cooldown | `defenseRules` | as specified | **PASS** |
+| Statistics exactly once: replayed duplicate and reversed conquests ignored; losses; held vs total; history survives losing territory | `statsExactlyOnce` | as specified | **PASS** |
+| Defense credit per defender, one per kingdom; historical kingdoms kept | `statsKingdoms` | as specified | **PASS** |
+| Ranking order and tie-breaks | `rankingOrder` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 112 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -109,6 +116,39 @@ Actions build as part of `./gradlew build`).
 | A20 | Admin claim silent | B attacks around spawn. | The admin (spawn owner) gets no alerts. |
 | A21 | Admin's ordinary claim | The admin owns a normal flagged claim; B raids it. | The admin gets normal alerts. |
 | A22 | Vanilla client | Join without the mod. | Titles, sounds, ring and boss bar all visible. |
+
+## Amendment scenarios: 90 s capture, limit, PvP, immunity, statistics (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| B1 | Uncontested capture | Completes after 90 s. |
+| B2 | Defender enters / multiple defenders / all leave | Pauses immediately; stays paused until the last leaves; resumes. |
+| B3 | Attackers leave / raid ends / next window | Gradual decay; never completes after the window; next window starts fresh. |
+| B4 | Player with 2 conquered claims captures | Succeeds (3/3). |
+| B5 | Player with 3 tries a 4th | "Conquest Limit Reached!" message; no progress. With an eligible teammate present, the teammate captures and receives the claim. |
+| B6 | Lose a conquered claim | `/war claims` shows a freed slot. |
+| B7 | Ordinary claims | `/war claims` count unaffected; conquered claims still cost no claim blocks. |
+| B8 | Restart | `/war claims` unchanged. |
+| B9 | Lower the limit to 1 while owning 3 | No claims removed; no further captures. |
+| B10 | PvP during a raid (melee, bow, crossbow, a modded weapon) | Raider hurts defender and vice versa inside the claim. |
+| B11 | PvP after the raid / at spawn | Back to Flan's normal rules / spawn protected. |
+| B12 | Server `pvp=false` | Still no PvP (not overridden). |
+| B13 | Conquest | `/flag info` shows 24 h immunity; ring turns blue. |
+| B14 | Attacker enters an immune zone | "This territory is immune to conquest. Recapture available in: …"; no capture; no capture alert to the owner. |
+| B15 | Raid an immune claim | Breaking, looting, TNT and PvP work; raid alert sent. |
+| B16 | Restart / `/time set` / sleep / flag move | Immunity remaining unchanged, apart from real time passing. |
+| B17 | Server offline 2 h | Immunity is 2 h shorter afterwards. |
+| B18 | `recapture_immunity_hours = 0` | New conquests have no immunity. |
+| B19 | `/war admin immunity set 1h` / `clear` / `inspect` as op, then as non-op | Works and is audit-logged / non-op denied. |
+| B20 | Conquest statistics | Winner's conquests +1 exactly once (also after restart); loser's lost +1; one war-log entry. |
+| B21 | Qualifying defense (≥10%, defender contests, attackers leave, decay to 0) | Each contesting defender +1; kingdom +1; log entry. |
+| B22 | Non-qualifying: 5% attempt / no defender / raid ends with attackers present / second attempt within 30 min | No defense recorded. |
+| B23 | Leaderboards (`players`, `kingdoms`, `defenses`, `territory`), `/war stats`, `/war stats <player>` | Correct values, order and pagination; "Your Rank". |
+| B24 | Change a player's FTB party after a conquest | Old log entry keeps the old kingdom. |
+| B25 | `/war log`, `player`, `claim`, `kingdom`, pages | Correct filtering, newest first, readable timestamps. |
+| B26 | Season end, archive, start, reset confirm | Archive viewable with `/war seasons`; claims, ownership, immunity and flags unchanged. |
+| B27 | Rollback a conquest | Ownership and immunity restored; log shows the conquest as reversed plus a reversal entry; statistics no longer count it. |
+| B28 | Kill the server right after a conquest | After restart exactly one conquest event; `/war admin stats check` reports no duplicates. |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.

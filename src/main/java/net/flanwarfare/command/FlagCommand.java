@@ -96,6 +96,10 @@ public final class FlagCommand {
         if (record.conquered) {
             Msg.send(player, Msg.info("Conquered territory (free of claim blocks and slots; cannot be resized or transferred)."));
         }
+        long immunity = record.immunityRemaining(now);
+        Msg.send(player, Msg.info(immunity > 0
+                ? "Recapture immunity: " + Msg.duration(immunity) + " left (it can still be raided, not captured)."
+                : "Recapture immunity: none."));
         Msg.send(player, Msg.info(core.raid().statusLine()));
         return 1;
     }
