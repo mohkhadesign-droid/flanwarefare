@@ -40,6 +40,7 @@ public final class WarConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> EXCLUDED_CLAIMS;
 
     // raid.permissions
+    public static final ForgeConfigSpec.BooleanValue ALLOW_ENTERING;
     public static final ForgeConfigSpec.BooleanValue ALLOW_BREAKING;
     public static final ForgeConfigSpec.BooleanValue ALLOW_PLACING;
     public static final ForgeConfigSpec.BooleanValue ALLOW_CONTAINERS;
@@ -198,6 +199,10 @@ public final class WarConfig {
                 "and machine access through the same categories, so there is no separate machine option: most modded",
                 "machines are OPENCONTAINER (inventories) or INTERACTBLOCK (everything else).")
                 .push("permissions");
+        ALLOW_ENTERING = b.comment("Flan CANSTAY: outsiders may enter and stay in raidable claims during raids. Without it,",
+                        "Flan teleports outsiders out of claims whose owner denied CANSTAY, so nobody could raid or capture them.",
+                        "Entering is never treated as a hostile action.")
+                .define("allow_entering", true);
         ALLOW_BREAKING = b.comment("Flan BREAK.").define("allow_breaking", true);
         ALLOW_PLACING = b.comment("Flan PLACE (includes placing TNT and temporary structures).").define("allow_placing", true);
         ALLOW_CONTAINERS = b.comment("Flan OPENCONTAINER: opening AND looting chests, barrels, furnaces, modded inventories and machine GUIs.",

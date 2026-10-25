@@ -38,6 +38,7 @@ import java.util.UUID;
  * /war capture                         captures on your claims or near you
  * /war alerts on|off                   mute or unmute live raid alerts for yourself
  * /war admin reload                    re-validate config and rebuild caches
+ * /war admin version                   version, build number, Minecraft/Forge/Flan versions
  * /war admin status                    diagnostics
  * /war admin mode disabled|always|custom
  * /war admin capturetime [seconds|reset] global capture duration (default 90 s)
@@ -94,6 +95,12 @@ public final class WarCommand {
                 .then(Commands.literal("admin")
                         .requires(src -> src.hasPermissionLevel(Msg.adminLevel()))
                         .then(Commands.literal("reload").executes(WarCommand::reload))
+                        .then(Commands.literal("version").executes(ctx -> {
+                            for (String line : FlanWarfare.versionLines()) {
+                                reply(ctx, line);
+                            }
+                            return 1;
+                        }))
                         .then(Commands.literal("status").executes(WarCommand::adminStatus))
                         .then(Commands.literal("mode")
                                 .then(Commands.literal("disabled").executes(ctx -> setMode(ctx, RaidMode.DISABLED)))

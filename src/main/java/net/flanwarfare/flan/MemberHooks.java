@@ -38,7 +38,7 @@ public final class MemberHooks {
     public static void afterSetGroup(Claim claim, UUID player, boolean success) {
         MemberNotices notices = notices();
         if (notices != null && player != null && success) {
-            notices.committed(claim, player, false);
+            notices.committed(claim, player);
         }
     }
 
@@ -73,7 +73,7 @@ public final class MemberHooks {
             return;
         }
         for (UUID id : members) {
-            notices.committed(claim, id, permissionsEdited);
+            notices.committed(claim, id);
         }
     }
 }

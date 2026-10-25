@@ -27,9 +27,11 @@ import java.util.UUID;
  * {@code Claim.setPlayerGroup}, {@code Claim.removePermGroup} (drops a group with its members)
  * and group permission edits through {@code Claim.editPerms}; {@code ClaimMixin} reports the
  * player's group before such a call and, only if the call returned success, marks the change.
- * A few seconds after the last change the net result is compared with the state before the
- * first one ({@link MembershipChange}), so only committed, real differences are announced,
- * once.
+ * A few seconds after the last change the net result (group and effective permissions, as
+ * Flan evaluates them) is compared with the state before the first one
+ * ({@link MembershipChange}), so only committed, meaningful differences are announced, once,
+ * with what actually changed (e.g. "You may now enter this claim"). In Flan 1.7.2 a player has
+ * exactly one group per claim, so moving between groups is a change, never a removal.
  */
 public final class MemberNotices {
     private static final long DEBOUNCE_MILLIS = 3000L;
@@ -39,14 +41,15 @@ public final class MemberNotices {
         final Claim claim;
         final UUID player;
         final String before;
+        final Set<String> beforeAllowed;
         boolean committed;
-        boolean groupPermsChanged;
         long due;
 
-        Pending(Claim claim, UUID player, String before) {
+        Pending(Claim claim, UUID player, String before, Set<String> beforeAllowed) {
             this.claim = claim;
             this.player = player;
             this.before = before;
+            this.beforeAllowed = beforeAllowed;
         }
     }
 
@@ -65,20 +68,20 @@ public final class MemberNotices {
     public void before(Claim claim, UUID player) {
         String key = key(claim, player);
         if (!pending.containsKey(key)) {
-            Pending p = new Pending(claim, player, FlanBridge.members(claim).get(player));
+            Pending p = new Pending(claim, player, FlanBridge.members(claim).get(player),
+                    FlanBridge.effectivePermissions(claim, player));
             p.due = System.currentTimeMillis() + DEBOUNCE_MILLIS;
             pending.put(key, p);
         }
     }
 
     /** After the call returned success: the change is committed in Flan. */
-    public void committed(Claim claim, UUID player, boolean groupPermsChanged) {
+    public void committed(Claim claim, UUID player) {
         Pending p = pending.get(key(claim, player));
         if (p == null) {
             return;
         }
         p.committed = true;
-        p.groupPermsChanged |= groupPermsChanged;
         p.due = System.currentTimeMillis() + DEBOUNCE_MILLIS;
     }
 
@@ -97,10 +100,20 @@ public final class MemberNotices {
             if (!p.committed || p.claim.isRemoved()) {
                 continue;
             }
+            // Compare the committed result with the state before the first edit, using the
+            // player's effective permissions as Flan evaluates them.
             String after = FlanBridge.members(p.claim).get(p.player);
-            MembershipChange.Type type = MembershipChange.classify(p.before, after, p.groupPermsChanged);
+            Set<String> afterAllowed = FlanBridge.effectivePermissions(p.claim, p.player);
+            MembershipChange.Type type = MembershipChange.classify(p.before, after, !afterAllowed.equals(p.beforeAllowed));
             if (type != MembershipChange.Type.NONE) {
-                deliver(p.claim, p.player, type.name(), null);
+                List<String> details = type == MembershipChange.Type.CHANGED
+                        ? MembershipChange.describeDiff(p.beforeAllowed, afterAllowed)
+                        : new ArrayList<String>();
+                if (type == MembershipChange.Type.ADDED) {
+                    details.add(afterAllowed.contains("CANSTAY")
+                            ? "Your group allows you to enter this claim." : "Your group does not allow you to enter this claim yet.");
+                }
+                deliver(p.claim, p.player, type.name(), null, details);
             }
         }
     }
@@ -119,7 +132,7 @@ public final class MemberNotices {
         }
         for (UUID id : members) {
             pending.remove(key(parent, id));
-            deliver(parent, id, "CONQUERED", conquerorName);
+            deliver(parent, id, "CONQUERED", conquerorName, new ArrayList<String>());
         }
     }
 
@@ -137,7 +150,7 @@ public final class MemberNotices {
         }
     }
 
-    private void deliver(Claim claim, UUID player, String type, String conqueror) {
+    private void deliver(Claim claim, UUID player, String type, String conqueror, List<String> details) {
         if (!wanted(type)) {
             return;
         }
@@ -154,6 +167,7 @@ public final class MemberNotices {
         notice.x = (d[0] + d[1]) / 2;
         notice.z = (d[2] + d[3]) / 2;
         notice.at = System.currentTimeMillis();
+        notice.details = details;
         ServerPlayerEntity online = core.server().getPlayerList().getPlayerByUUID(player);
         if (online != null) {
             show(online, notice);
@@ -183,6 +197,9 @@ public final class MemberNotices {
                     return;
                 }
                 notice.type = merged.name();
+                if (merged == MembershipChange.Type.ADDED && notice.details.isEmpty()) {
+                    notice.details = old.details;
+                }
             }
         }
         list.add(notice);
@@ -207,7 +224,8 @@ public final class MemberNotices {
             case "ADDED":
                 Msg.send(player, Msg.text("[Flan Warfare] You have been added to " + n.ownerName + "'s claim: \""
                         + n.label + "\"" + where + ".", TextFormatting.GREEN));
-                Msg.send(player, Msg.text("You now have the permissions assigned to you by the claim owner.", TextFormatting.GRAY));
+                Msg.send(player, Msg.text("Your access is determined by the permissions assigned to your Flan group.",
+                        TextFormatting.GRAY));
                 Msg.actionBar(player, Msg.text("You were added to " + n.label + "!", TextFormatting.GREEN));
                 break;
             case "REMOVED":
@@ -223,6 +241,11 @@ public final class MemberNotices {
                 Msg.send(player, Msg.text("[Flan Warfare] Your permissions in \"" + n.label + "\"" + where
                         + " have been updated.", TextFormatting.AQUA));
                 break;
+        }
+        if (n.details != null) {
+            for (String line : n.details) {
+                Msg.send(player, Msg.text(line, TextFormatting.GRAY));
+            }
         }
     }
 

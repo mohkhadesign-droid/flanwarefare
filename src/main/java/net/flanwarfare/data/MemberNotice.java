@@ -13,4 +13,6 @@ public final class MemberNotice {
     public int x;
     public int z;
     public long at;
+    /** Readable permission differences, e.g. "You may now enter this claim." */
+    public java.util.List<String> details = new java.util.ArrayList<>();
 }

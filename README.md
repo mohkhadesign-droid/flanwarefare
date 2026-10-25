@@ -11,7 +11,7 @@ war history.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 137
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 143
 > automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
@@ -38,7 +38,12 @@ war history.
 
 Settings still at an old default are moved to the new default automatically, once, and listed
 in the server log as "Config updated to the new default". Settings you changed yourself are
-never touched. Existing single-banner flags become flagpoles when moved (`/flag move`).
+never touched.
+
+**The one ambiguous case:** a value you set by hand to exactly the old default, such as
+`radius_blocks = 2.0`, can't be told apart from an untouched default, so it is migrated. If you
+want it, set it back once; it won't be changed again. Claims, flags, designs, conquests, immunity
+and statistics are never touched by migration. Existing single-banner flags become flagpoles when moved (`/flag move`).
 
 Data is stored in `world/data/flanwarfare/war_data.json` (atomic writes, previous version kept as
 `war_data.json.bak`). Include it in backups together with `world/data/claims/`.
@@ -69,6 +74,8 @@ automatically abandoned if `auto_abandon_expired_claims = true`).
 Raid windows follow the Overworld clock (default 15:00-06:00 in-game). During a raid, anyone
 who is not the owner or a Flan member of an ordinary claim can genuinely raid it:
 
+- enter and stay in the claim, even if its owner turned off Flan's `CANSTAY`. Outside raids,
+  `CANSTAY` works as normal, and entering never counts as an attack;
 - break and place blocks, including placing TNT;
 - open and loot chests, barrels, furnaces and modded inventories;
 - use doors, trapdoors, gates, buttons, levers, pressure plates, crafting stations and machines;
@@ -210,7 +217,13 @@ set groups and permissions, and create subclaims. They can invite anyone, includ
 owner. The only things they can't do are resize the claim or transfer it.
 
 Players hear about it whenever an owner adds them to a claim, removes them, or changes their
-permissions through any Flan menu or command:
+permissions through any Flan menu or command. This includes Claim-Menu → Edit Permissiongroups,
+assigning players to groups, and toggling a group's permissions such as `CANSTAY`. The messages
+say what actually changed for them, e.g. "You may now enter this claim." or "No longer allowed:
+OPENCONTAINER". A change that leaves their effective permissions the same says nothing.
+
+In Flan 1.7.2 a player belongs to exactly one group per claim, so moving someone to another group
+is reported as a permission change, never as a removal. The notices are:
 
 - "You have been added to Ali's claim: "Northern Fortress"…", with an action-bar line;
 - "…removed from…";
@@ -282,6 +295,7 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | Command | What it does |
 |---|---|
 | `/war admin status` | Diagnostics: safe mode, raid state, claim counts, claims needing recovery, expired claims, interrupted conquests, team integration, config problems. |
+| `/war admin version` | Version, build number, Minecraft, Forge and Flan versions. |
 | `/war admin reload` | Re-validate the config, rebuild caches and re-detect FTB Teams. |
 | `/war admin mode disabled\|always\|custom` | Change the raid mode (saved to the config). |
 | `/war admin setwindow 15:00 06:00` | Change the custom raid window (saved). |
@@ -318,6 +332,7 @@ values are:
 |---|---|---|
 | `raid.mode` | `CUSTOM` | `DISABLED`, `ALWAYS` or `CUSTOM` |
 | `raid.start_time` / `end_time` | `15:00` / `06:00` | In-game time. 06:00 = tick 0, 15:00 = 9000, 00:00 = 18000. Windows may cross midnight. |
+| `raid.permissions.allow_entering` | `true` | Flan `CANSTAY` for outsiders during raids (needed to raid claims that deny entry) |
 | `raid.permissions.allow_breaking` / `allow_placing` / `allow_containers` | `true` | Flan `BREAK`, `PLACE`, `OPENCONTAINER` (opening and looting are one Flan permission) |
 | `raid.permissions.allow_doors_and_trapdoors` / `allow_redstone_interactions` / `allow_block_interactions` | `true` | Doors, gates; buttons, levers, plates, redstone; crafting stations and machines (`INTERACTBLOCK`) |
 | `raid.permissions.allow_projectiles_and_pearls` / `allow_entity_damage` / `allow_pvp_during_raids` | `true` | |

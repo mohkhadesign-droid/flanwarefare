@@ -26,6 +26,7 @@ public class PermissionRegistry {
     public static ClaimPermission FLIGHT;
     public static ClaimPermission NOHUNGER;
     public static ClaimPermission LOCKITEMS;
+    public static ClaimPermission CANSTAY;
     public static ClaimPermission REDSTONE;
     public static ClaimPermission TARGETBLOCK;
     public static ClaimPermission ANVIL;
@@ -48,6 +49,10 @@ public class PermissionRegistry {
     }
 
     public static List<ClaimPermission> getPerms() {
+        throw new UnsupportedOperationException("stub");
+    }
+
+    public static java.util.Collection<ClaimPermission> globalPerms() {
         throw new UnsupportedOperationException("stub");
     }
 }

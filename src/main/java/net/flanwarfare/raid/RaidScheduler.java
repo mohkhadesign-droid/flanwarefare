@@ -126,6 +126,9 @@ public final class RaidScheduler {
 
     private Set<ClaimPermission> buildPermissions() {
         Set<ClaimPermission> set = new HashSet<>();
+        if (WarConfig.ALLOW_ENTERING.get()) {
+            set.add(PermissionRegistry.CANSTAY);
+        }
         if (WarConfig.ALLOW_BREAKING.get()) {
             set.add(PermissionRegistry.BREAK);
         }
@@ -195,6 +198,7 @@ public final class RaidScheduler {
      */
     public static boolean isHostileAction(ClaimPermission permission) {
         return permission != PermissionRegistry.HURTPLAYER
+                && permission != PermissionRegistry.CANSTAY
                 && permission != PermissionRegistry.ENDERPEARL
                 && permission != PermissionRegistry.CHORUSFRUIT
                 && permission != PermissionRegistry.TRAMPLE

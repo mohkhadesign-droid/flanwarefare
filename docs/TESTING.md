@@ -52,7 +52,9 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 
 | Membership net change: added, removed, group change, group edit, no-op silent, offline merge rules | `membershipChanges` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 137 checks passed` (locally, and on every GitHub
+| Effective-permission diff wording (CANSTAY gained/lost, lists), no diff -> no lines; group switch with identical permissions is silent | `permissionDiff`, `membershipChanges` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 143 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -202,6 +204,24 @@ Actions build as part of `./gradlew build`).
 | D12 | B's own TNT inside B's claim during a raid | No raid alert. |
 | D13 | Restart | Membership and behaviour unchanged (all read from Flan). |
 | D14 | Old members of a claim that gets conquered | "Your access to … ended: conquered by …". |
+
+## Flan permission GUI, CANSTAY, migration and version scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| E1 | Claim-Menu → Edit Permissiongroups → add NoUserWorks to a group | One "added" notice about 3 s later, saying whether the group allows entering. |
+| E2 | Remove NoUserWorks from the group | One "removed" notice. |
+| E3 | Toggle CANSTAY on/off in his group | "You may now enter this claim." / "You no longer have permission to enter."; never "removed". |
+| E4 | Toggle a permission twice quickly, or move him to a group with identical permissions | No notice. |
+| E5 | Repeat E1 while he is offline, then he logs in | Notice delivered once at login. |
+| E6 | Owner denies CANSTAY for everyone; outsider walks in outside raid hours / during raid hours | Teleported out / can enter and capture. |
+| E7 | NoUserWorks (member with CANSTAY, door, container) enters during a raid and uses door/container | No raid alert; he cannot use what his group doesn't allow. |
+| E8 | Public CANSTAY claim: random visitor stands in the ring during a capture | Not a defender; can capture (if not a member). |
+| E9 | NoUserWorks (member) tries to capture | Cannot. After removal: can, within half a second. |
+| E10 | Manager-group member stands in the ring | CONTESTED, animation freezes. |
+| E11 | Conqueror opens Claim-Menu → Edit Permissiongroups, adds the former owner, edits CANSTAY | Works; former owner notified and gets exactly those permissions; resize still refused. |
+| E12 | Old config with radius 2.0 and a custom capture time 120 | After update: radius 3.0 (logged), capture time stays 120. Restart again: nothing logged. |
+| E13 | `/war admin version` and the startup log | Same version and build number as the jar name. |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.

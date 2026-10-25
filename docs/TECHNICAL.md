@@ -500,3 +500,58 @@ ended" notice before the wipe.
 **Limitation.** A Flan permission edit that changes nothing still marks the group as edited.
 Flan reports success without saying whether the value changed, so an occasional redundant
 "permissions updated" message is possible.
+
+## 20. Flan permission GUI integration, CANSTAY, migration and build numbers
+
+**What the Flan menus change** (verified in Flan 1.7.2):
+
+- `Claim.playersGroups` is a `Map<UUID, String>`: one group per player per claim. Subclaims have
+  their own map.
+- *Claim-Menu → Edit Permissiongroups* uses `GroupScreenHandler`, `GroupPlayerScreenHandler` and
+  `PermissionScreenHandler`, plus the `/flan` group, player and permission commands. They all end
+  in the three methods hooked in section 19.
+- A member's effective permission, as `Claim.canInteract` decides it: the group's value if the
+  group sets the permission, otherwise the claim-wide value (a subclaim falling back to its
+  parent). The owner may do everything.
+
+**Notices.** `FlanBridge.effectivePermissions` reproduces that rule for all group-editable
+permissions; Flan's global permissions are excluded. It is evaluated before the first edit and
+after the last committed one.
+
+| Situation | Notice |
+|---|---|
+| Not a member before, member after | ADDED, plus whether the group allows entering |
+| Member before, not a member after | REMOVED |
+| Member both times, effective permissions differ | CHANGED, plus a readable diff (CANSTAY phrased as entering, others listed) |
+| Member both times, effective permissions identical | Nothing: a group switch or toggle with no effective difference isn't meaningful |
+
+This also removes the redundant "permissions updated" message that section 19 listed as a
+limitation.
+
+Edits to claim-wide (global) permissions are not hooked; members whose group leaves such a
+permission unset are affected without a notice.
+
+**CANSTAY.** Flan enforces it in `EntityInteractEvents.updateClaim`, every tick, by teleporting
+out any player for whom `canInteract(player, CANSTAY, pos)` is false. During raids the add-on
+grants CANSTAY to outsiders in raidable claims (`raid.permissions.allow_entering`), otherwise a
+claim that denies entry could never be raided or captured. CANSTAY is never a hostile action.
+Authorized members keep Flan's own answer. Defender and capture eligibility use explicit
+membership only, never public permissions.
+
+**Migration.** `general.config_version` (0 = before versioning) is compared with
+`CURRENT_CONFIG_VERSION`. Every value still exactly at an old default moves to the new default,
+the change is logged with old and new values, and the version is saved. That makes it run once,
+idempotently. Admin-changed values are kept. A value set by hand to exactly the old default can't
+be told apart and is migrated; this is documented in the README, and setting it once more makes
+it stick. War data (`war_data.json`, format version 1) needs no migration: new fields default to
+empty, and a `.bak` of the previous file is kept on every save.
+
+**Build numbers.** The version is `mod_version` plus `-b<GITHUB_RUN_NUMBER>` (for example
+`1.1.0-b7`). GitHub increments the run number for every run and never reuses one. It appears in:
+
+- the jar name and the jar's `Implementation-Version` (and therefore in Forge's mod list);
+- the startup log;
+- `/war admin version` and `/war admin status`;
+- `/war status`.
+
+Local builds show "local".

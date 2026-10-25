@@ -88,7 +88,9 @@ public final class WarCore {
     }
 
     static void start(MinecraftServer server) {
-        FlanWarfare.LOG.info("Flan Warfare {} starting", FlanWarfare.version());
+        for (String line : FlanWarfare.versionLines()) {
+            FlanWarfare.LOG.info(line);
+        }
         for (String change : WarConfig.migrateDefaults()) {
             FlanWarfare.LOG.info("Config updated to the new default: {}", change);
         }

@@ -26,6 +26,24 @@ public final class FlanWarfare {
     public static final String MOD_ID = "flanwarfare";
     public static final Logger LOG = LogManager.getLogger("FlanWarfare");
 
+    /** Version lines shown at startup and by /war admin version. */
+    public static java.util.List<String> versionLines() {
+        String full = version();
+        int dash = full.lastIndexOf("-b");
+        String base = dash > 0 ? full.substring(0, dash) : full;
+        String build = dash > 0 ? full.substring(dash + 2) : "local (not a GitHub Actions build)";
+        String flan = ModList.get().getModContainerById("flan")
+                .map(c -> c.getModInfo().getVersion().toString()).orElse("not installed");
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add("Flan Warfare & Conquest");
+        lines.add("Version: " + base);
+        lines.add("Build: " + build);
+        lines.add("Minecraft: " + net.minecraftforge.versions.mcp.MCPVersion.getMCVersion()
+                + "  Forge: " + net.minecraftforge.versions.forge.ForgeVersion.getVersion());
+        lines.add("Flan: " + flan);
+        return lines;
+    }
+
     /** Installed version including the build number, e.g. 1.1.0-b6. */
     public static String version() {
         return ModList.get().getModContainerById(MOD_ID)

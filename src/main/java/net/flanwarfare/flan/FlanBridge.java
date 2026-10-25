@@ -95,6 +95,46 @@ public final class FlanBridge {
     }
 
     /**
+     * Effective permissions of a player in one claim object (parent or subclaim), computed the
+     * way Flan 1.7.2's Claim.canInteract does for players: the owner may do everything; a member
+     * uses their group's value where the group sets one, otherwise the claim-wide value; anyone
+     * else uses the claim-wide value. Flan's "global" permissions (not group-editable) are left
+     * out. In Flan 1.7.2 a player has exactly one group per claim.
+     */
+    public static java.util.Set<String> effectivePermissions(Claim claim, UUID player) {
+        java.util.Set<String> allowed = new java.util.TreeSet<>();
+        java.util.Collection<ClaimPermission> global = PermissionRegistry.globalPerms();
+        String group = members(claim).get(player);
+        boolean owner = player.equals(claim.getOwner());
+        for (ClaimPermission permission : PermissionRegistry.getPerms()) {
+            if (global.contains(permission)) {
+                continue;
+            }
+            boolean ok;
+            if (owner) {
+                ok = true;
+            } else {
+                int value = group == null ? -1 : claim.groupHasPerm(group, permission);
+                ok = value == -1 ? claimWide(claim, permission) : value == 1;
+            }
+            if (ok) {
+                allowed.add(permission.id);
+            }
+        }
+        return allowed;
+    }
+
+    /** Claim-wide value, a subclaim falling back to its parent when unset (Claim.hasPerm). */
+    private static boolean claimWide(Claim claim, ClaimPermission permission) {
+        Claim parent = claim.parentClaim();
+        int own = claim.permEnabled(permission);
+        if (parent != null && own == -1) {
+            return parent.permEnabled(permission) == 1;
+        }
+        return own == 1;
+    }
+
+    /**
      * True if Flan already allows this permission for everyone at the position (the claim-wide
      * setting, falling back to the parent for unset subclaim values), mirroring Claim.hasPerm in
      * Flan 1.7.2. Such actions are never treated as hostile and never overridden.
