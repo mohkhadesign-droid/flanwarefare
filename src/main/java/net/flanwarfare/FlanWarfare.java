@@ -4,6 +4,7 @@ import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.core.WarEvents;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.ExtensionPoint;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -24,6 +25,12 @@ import org.apache.logging.log4j.Logger;
 public final class FlanWarfare {
     public static final String MOD_ID = "flanwarfare";
     public static final Logger LOG = LogManager.getLogger("FlanWarfare");
+
+    /** Installed version including the build number, e.g. 1.1.0-b6. */
+    public static String version() {
+        return ModList.get().getModContainerById(MOD_ID)
+                .map(c -> c.getModInfo().getVersion().toString()).orElse("unknown");
+    }
 
     public FlanWarfare() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WarConfig.SPEC);

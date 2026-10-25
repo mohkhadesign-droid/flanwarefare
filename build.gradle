@@ -10,7 +10,9 @@ buildscript {
 
 apply plugin: 'net.minecraftforge.gradle'
 
-version = mod_version
+// Each GitHub Actions build gets its own number (e.g. 1.1.0-b7), visible in the jar name,
+// the server log and /war status, so it is always clear which build is installed.
+version = System.getenv('GITHUB_RUN_NUMBER') ? "${mod_version}-b${System.getenv('GITHUB_RUN_NUMBER')}" : mod_version
 group = 'net.flanwarfare'
 archivesBaseName = 'flanwarfare'
 

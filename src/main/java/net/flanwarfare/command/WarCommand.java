@@ -8,6 +8,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import io.github.flemmli97.flan.claim.Claim;
 import io.github.flemmli97.flan.player.PlayerClaimData;
+import net.flanwarfare.FlanWarfare;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.config.WarConfig.RaidMode;
 import net.flanwarfare.conquest.ConquestService;
@@ -168,7 +169,8 @@ public final class WarCommand {
         if (core == null) {
             return 0;
         }
-        reply(ctx, core.raid().statusLine());
+        reply(ctx, core.raid().statusLine() + " (Flan Warfare " + FlanWarfare.version() + ", capture zone "
+                + WarConfig.CAPTURE_RADIUS.get() + " blocks)");
         return 1;
     }
 
@@ -214,6 +216,10 @@ public final class WarCommand {
                 conquered++;
             }
         }
+        reply(ctx, "Flan Warfare " + FlanWarfare.version() + " | capture radius " + WarConfig.CAPTURE_RADIUS.get()
+                + " blocks | capture time " + WarConfig.CAPTURE_SECONDS.get() + "s | conquest limit "
+                + WarConfig.MAX_CONQUERED_PER_PLAYER.get() + " | flagpoles " + (WarConfig.POLE_ENABLED.get() ? "on" : "off")
+                + " | member notices " + (WarConfig.MEMBER_NOTICES.get() ? "on" : "off"));
         reply(ctx, core.raid().statusLine());
         reply(ctx, "Claims: " + active + " active, " + pending + " without flag, " + recovery
                 + " needing recovery, " + conquered + " conquered. Captures running: " + core.capture().activeCount());

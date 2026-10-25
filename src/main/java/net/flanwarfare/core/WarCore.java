@@ -88,6 +88,10 @@ public final class WarCore {
     }
 
     static void start(MinecraftServer server) {
+        FlanWarfare.LOG.info("Flan Warfare {} starting", FlanWarfare.version());
+        for (String change : WarConfig.migrateDefaults()) {
+            FlanWarfare.LOG.info("Config updated to the new default: {}", change);
+        }
         Path file = dataFile(server);
         WarData data;
         try {
@@ -117,8 +121,9 @@ public final class WarCore {
         core.raid.initialise();
         core.ready = true;
         core.saveNow();
-        FlanWarfare.LOG.info("Flan Warfare ready: {} claim records, raid mode {}, teams: {}",
-                data.claims().size(), WarConfig.RAID_MODE.get(), core.sides.status());
+        FlanWarfare.LOG.info("Flan Warfare {} ready: {} claim records, raid mode {}, capture radius {} blocks, "
+                        + "capture time {}s, teams: {}", FlanWarfare.version(), data.claims().size(), WarConfig.RAID_MODE.get(),
+                WarConfig.CAPTURE_RADIUS.get(), WarConfig.CAPTURE_SECONDS.get(), core.sides.status());
     }
 
     static void stop() {

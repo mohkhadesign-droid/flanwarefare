@@ -165,6 +165,10 @@ public final class WarConfig {
     public static final ForgeConfigSpec.BooleanValue PREVENT_SLEEP_SKIP;
     public static final ForgeConfigSpec.BooleanValue AUDIT_LOGGING;
     public static final ForgeConfigSpec.IntValue ADMIN_PERMISSION_LEVEL;
+    public static final ForgeConfigSpec.IntValue CONFIG_VERSION;
+
+    /** Version of the defaults below; bumped whenever a default changes. */
+    public static final int CURRENT_CONFIG_VERSION = 2;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -430,6 +434,8 @@ public final class WarConfig {
         AUDIT_LOGGING = b.comment("Log conquests, activations, relocations and admin actions to the server log.")
                 .define("enable_audit_logging", true);
         ADMIN_PERMISSION_LEVEL = b.defineInRange("admin_permission_level", 2, 1, 4);
+        CONFIG_VERSION = b.comment("Managed by the mod; do not edit. Used to move values still at an old default to the new default.")
+                .defineInRange("config_version", 0, 0, 1000);
         b.pop();
 
         SPEC = b.build();
@@ -509,6 +515,37 @@ public final class WarConfig {
             cachedEnd = ClockMath.parseClock(end);
             cachedStartText = start;
             cachedEndText = end;
+        }
+    }
+
+    /**
+     * Forge keeps the values of an existing config file, so a file written by an older build
+     * keeps old defaults (e.g. a 2-block radius) after updating. This moves every value that is
+     * still exactly at an OLD default to the NEW default, once, and leaves values an admin
+     * changed alone. Returns what was changed.
+     */
+    public static List<String> migrateDefaults() {
+        List<String> changed = new ArrayList<>();
+        int version = CONFIG_VERSION.get();
+        if (version >= CURRENT_CONFIG_VERSION) {
+            return changed;
+        }
+        migrate(changed, CAPTURE_SECONDS, 180, DEFAULT_CAPTURE_SECONDS, "capture.duration_seconds");
+        migrate(changed, CAPTURE_RADIUS, 2.0, 3.0, "capture.radius_blocks");
+        migrate(changed, MIN_FLAG_DISTANCE, 4, 7, "flags.min_flag_distance");
+        migrate(changed, MAX_CONQUERED_PER_PLAYER, -1, 3, "conquest.max_conquered_claims_per_player");
+        migrate(changed, AURA_DISTANCE, 24, 48, "capture_aura.visibility_distance_blocks");
+        CONFIG_VERSION.set(CURRENT_CONFIG_VERSION);
+        CONFIG_VERSION.save();
+        return changed;
+    }
+
+    private static <T> void migrate(List<String> changed, ForgeConfigSpec.ConfigValue<T> value, T oldDefault, T newDefault,
+                                    String name) {
+        if (oldDefault.equals(value.get())) {
+            value.set(newDefault);
+            value.save();
+            changed.add(name + ": " + oldDefault + " -> " + newDefault);
         }
     }
 

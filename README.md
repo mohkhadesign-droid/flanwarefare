@@ -20,10 +20,25 @@ war history.
 ## Installation
 
 1. Download the JAR from the latest workflow run: **Actions → Build → flanwarfare-jar**.
-2. Put `flanwarfare-1.0.0.jar` in the **server's** `mods/` folder, next to Flan 1.16.5-1.7.2.
-   Do not install it on clients. The mod refuses to load with any other Flan version.
+2. Put the JAR (named like `flanwarfare-1.1.0-b7.jar`, where `b7` is the build number) in the
+   **server's** `mods/` folder, next to Flan 1.16.5-1.7.2. Do not install it on clients. The mod
+   refuses to load with any other Flan version.
 3. Start the server once. The config appears at `world/serverconfig/flanwarfare-server.toml`.
 4. Edit it, then save. Forge reloads it automatically; `/war admin reload` re-validates it.
+
+### Updating
+
+1. Stop the server.
+2. **Delete the old flanwarfare JAR** from `mods/`, and keep only the new one. Two copies can't
+   load together.
+3. Start the server.
+4. Check `/war status` or `/war admin status`. Both show the installed version, such as
+   `1.1.0-b7`, plus the active capture radius and time. The server log prints the same line at
+   startup.
+
+Settings still at an old default are moved to the new default automatically, once, and listed
+in the server log as "Config updated to the new default". Settings you changed yourself are
+never touched. Existing single-banner flags become flagpoles when moved (`/flag move`).
 
 Data is stored in `world/data/flanwarfare/war_data.json` (atomic writes, previous version kept as
 `war_data.json.bak`). Include it in backups together with `world/data/claims/`.
@@ -31,7 +46,7 @@ Data is stored in `world/data/flanwarfare/war_data.json` (atomic writes, previou
 ### Building
 
 Every push runs `.github/workflows/build.yml`, which runs `./gradlew build` and uploads the JAR.
-To build locally instead: JDK 8, then `./gradlew build`. The JAR is `build/libs/flanwarfare-1.0.0.jar`.
+To build locally instead: JDK 8, then `./gradlew build`. The JAR is `build/libs/flanwarfare-1.1.0.jar`.
 
 Flan itself is **not** in this repository (it is "All Rights Reserved"). The build compiles
 against signature-only stubs in `src/flanstubs`, which were checked member by member against
