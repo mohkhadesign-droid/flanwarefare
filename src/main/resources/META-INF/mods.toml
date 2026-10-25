@@ -1,0 +1,35 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="flanwarfare"
+version="${file.jarVersion}"
+displayName="Flan Warfare & Conquest"
+authors="flanwarfare"
+description='''
+Server-side add-on for Flan 1.7.2: scheduled raid windows, claim flags,
+contested territorial capture and permanent conquest. Clients do not need it.
+'''
+
+[[dependencies.flanwarfare]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.flanwarfare]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="BOTH"
+
+# The add-on hooks specific Flan internals verified against Flan 1.16.5-1.7.2 only.
+[[dependencies.flanwarfare]]
+    modId="flan"
+    mandatory=true
+    versionRange="[1.16.5-1.7.2]"
+    ordering="AFTER"
+    side="BOTH"

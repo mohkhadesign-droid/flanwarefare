@@ -1,0 +1,11 @@
+.gradle/
+build/
+out/
+run/
+*.iml
+.idea/
+.vscode/
+# Never commit Flan itself (All Rights Reserved); the build uses signature stubs instead.
+libs/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar

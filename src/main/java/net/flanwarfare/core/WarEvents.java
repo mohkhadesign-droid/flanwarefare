@@ -1,0 +1,131 @@
+package net.flanwarfare.core;
+
+import io.github.flemmli97.flan.api.forge.PermissionCheckEvent;
+import net.flanwarfare.command.FlagCommand;
+import net.flanwarfare.command.WarCommand;
+import net.flanwarfare.config.WarConfig;
+import net.flanwarfare.data.ClaimRecord;
+import net.flanwarfare.protection.FlagProtection;
+import net.flanwarfare.protection.RaidPermissions;
+import net.flanwarfare.util.Msg;
+import net.minecraft.entity.player.ServerPlayerEntity;
+import net.minecraft.world.World;
+import net.minecraft.world.server.ServerWorld;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.world.BlockEvent;
+import net.minecraftforge.event.world.ExplosionEvent;
+import net.minecraftforge.event.world.PistonEvent;
+import net.minecraftforge.event.world.SleepFinishedTimeEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
+import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
+
+import java.util.List;
+
+/** Every Forge event the add-on listens to, delegating to the services. */
+public final class WarEvents {
+    private final RaidPermissions permissions = new RaidPermissions();
+    private final FlagProtection protection = new FlagProtection();
+
+    /** LOWEST so Flan (which loads claims while worlds are created) is completely ready. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onServerStarted(FMLServerStartedEvent event) {
+        WarCore.start(event.getServer());
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(FMLServerStoppingEvent event) {
+        WarCore.stop();
+    }
+
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        WarCore core = WarCore.get();
+        if (core != null) {
+            core.tick();
+        }
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        FlagCommand.register(event.getDispatcher());
+        WarCommand.register(event.getDispatcher());
+    }
+
+    @SubscribeEvent
+    public void onPermissionCheck(PermissionCheckEvent event) {
+        permissions.onPermissionCheck(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onBreak(BlockEvent.BreakEvent event) {
+        protection.onBreak(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onPlace(BlockEvent.EntityPlaceEvent event) {
+        protection.onPlace(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onFluidPlace(BlockEvent.FluidPlaceBlockEvent event) {
+        protection.onFluidPlace(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOW)
+    public void onExplosion(ExplosionEvent.Detonate event) {
+        protection.onExplosion(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onPiston(PistonEvent.Pre event) {
+        protection.onPiston(event);
+    }
+
+    /**
+     * Vanilla and Forge decide the post-sleep time through this event; a raid window clamps it.
+     * Beds stay usable (spawn points are set as normal); only the time jump is limited.
+     */
+    @SubscribeEvent(priority = EventPriority.LOW)
+    public void onSleepFinished(SleepFinishedTimeEvent event) {
+        WarCore core = WarCore.ready();
+        if (core == null || !WarConfig.PREVENT_SLEEP_SKIP.get() || !(event.getWorld() instanceof ServerWorld)) {
+            return;
+        }
+        ServerWorld world = (ServerWorld) event.getWorld();
+        if (world.getDimensionKey() != World.OVERWORLD) {
+            return;
+        }
+        long now = world.getDayTime();
+        long target = event.getNewTime();
+        long clamped = core.raid().clampSleep(now, target);
+        if (clamped != target && event.setTimeAddition(clamped)) {
+            for (ServerPlayerEntity player : world.getPlayers()) {
+                Msg.send(player, Msg.warn(core.raid().isActive()
+                        ? "A raid is active: sleeping cannot skip the night."
+                        : "Sleeping stopped at the start of the raid window."));
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        WarCore core = WarCore.ready();
+        if (core == null || !(event.getPlayer() instanceof ServerPlayerEntity)) {
+            return;
+        }
+        ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
+        Msg.send(player, Msg.info(core.raid().statusLine()));
+        List<ClaimRecord> pending = core.lifecycle().pendingOf(player.getUniqueID());
+        if (!pending.isEmpty()) {
+            Msg.send(player, Msg.warn("You have " + pending.size() + " inactive claim(s) without a flag. "
+                    + "They protect nothing until you stand inside and run /flag place."));
+        }
+    }
+}
