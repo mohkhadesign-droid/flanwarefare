@@ -50,7 +50,9 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 | Capture time 90 s -> 120 s at 50%: percentage kept, exactly 60 s more; shortening never completes | `captureTimeChange` | as specified | **PASS** |
 | Flag animation frames: 0/20/49/50/70/100%, monotonic descent, decay below midpoint shows owner | `flagAnimation` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 127 checks passed` (locally, and on every GitHub
+| Membership net change: added, removed, group change, group edit, no-op silent, offline merge rules | `membershipChanges` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 137 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -181,6 +183,25 @@ Actions build as part of `./gradlew build`).
 | C21 | `/war admin stats check <player>` | Correct per-player values. |
 | C22 | Introduce an inconsistency (e.g. delete a claim with the mod removed), check, then `stats repair confirm` | Warning shown, then fixed; audit-log line. |
 | C23 | FTB party members vs a player only trusted in a claim | Only party members share a kingdom on the leaderboard. |
+
+## Radius 3, Flan authorization and member-notice scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| D1 | Ring and capture at 2.9 vs 3.1 blocks from the pole base | Ring radius 3; capture and contest only inside. |
+| D2 | B conquers A's claim, opens the Flan menu | B can add players, edit groups/permissions and create subclaims; resizing is refused. |
+| D3 | B adds A through the Flan menu | A gets "You have been added to B's claim…" plus action bar; A has exactly the granted permissions. |
+| D4 | B toggles several permissions of A's group quickly | A gets one "permissions updated" message about 3 s later. |
+| D5 | B removes A | A gets "removed…"; A loses access immediately. |
+| D6 | B adds A while A is offline, then A logs in | Notice delivered at login; add+remove while offline produces nothing. |
+| D7 | Raid hours: A (trusted) enters, opens doors, uses granted containers | No raid alert to B; A cannot use containers B did not grant. |
+| D8 | Raid hours: untrusted C breaks blocks | Raid alert to B as before. |
+| D9 | B removes A during a raid, A breaks a block | Raid permissions apply to A and B is alerted. |
+| D10 | Trusted A stands in the ring while C captures | A contests only if A's group is a manager group (default policy); A can never capture B's claim while trusted. |
+| D11 | A is removed mid-capture | A's role changes within half a second; progress is not reset. |
+| D12 | B's own TNT inside B's claim during a raid | No raid alert. |
+| D13 | Restart | Membership and behaviour unchanged (all read from Flan). |
+| D14 | Old members of a claim that gets conquered | "Your access to … ended: conquered by …". |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.

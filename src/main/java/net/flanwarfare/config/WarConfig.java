@@ -93,6 +93,14 @@ public final class WarConfig {
     public static final ForgeConfigSpec.BooleanValue OWNER_CAN_CONTEST;
     public static final ForgeConfigSpec.EnumValue<DefenderMembers> DEFENDER_MEMBERS;
     public static final ForgeConfigSpec.BooleanValue TEAM_MEMBERS_DEFEND;
+    public static final ForgeConfigSpec.BooleanValue MEMBERS_CANNOT_CAPTURE;
+
+    // member_notifications
+    public static final ForgeConfigSpec.BooleanValue MEMBER_NOTICES;
+    public static final ForgeConfigSpec.BooleanValue MEMBER_NOTICE_ADDED;
+    public static final ForgeConfigSpec.BooleanValue MEMBER_NOTICE_REMOVED;
+    public static final ForgeConfigSpec.BooleanValue MEMBER_NOTICE_CHANGED;
+    public static final ForgeConfigSpec.BooleanValue MEMBER_NOTICE_OFFLINE;
 
     // capture_aura
     public static final ForgeConfigSpec.BooleanValue AURA_ENABLED;
@@ -254,8 +262,8 @@ public final class WarConfig {
                 .define("auto_abandon_expired_claims", false);
         MOVEMENT_COOLDOWN_SECONDS = b.comment("Cooldown between /flag move uses. Moving is always forbidden during raids.")
                 .defineInRange("movement_cooldown_seconds", 300, 0, 86400 * 7);
-        MIN_FLAG_DISTANCE = b.comment("Minimum distance between two registered flags, in blocks.")
-                .defineInRange("min_flag_distance", 4, 2, 64);
+        MIN_FLAG_DISTANCE = b.comment("Minimum distance between two registered flags, in blocks (7 keeps 3-block capture zones apart).")
+                .defineInRange("min_flag_distance", 7, 2, 64);
         DEFAULT_BANNER_COLOR = b.comment("Banner colour used when a player has no saved design.")
                 .define("default_banner_color", "white");
         RESTORE_SUPPORT_BLOCK = b.comment("Block placed under a flag during restoration if its support vanished.")
@@ -272,7 +280,7 @@ public final class WarConfig {
         CAPTURE_RADIUS = b.comment("THE capture radius: horizontal distance from the flag's centre, in blocks.",
                         "Used for capture detection, defender contesting, the particle aura and the action-bar distance.",
                         "Players also need to be between 1 block below and radius+1 blocks above the flag's base.")
-                .defineInRange("radius_blocks", 2.0, 1.0, 16.0);
+                .defineInRange("radius_blocks", 3.0, 1.0, 16.0);
         VERTICAL_TOLERANCE = b.comment("Players must stand within this many blocks above or below the flagpole's base",
                         "(stops capturing from tunnels underneath or roofs above). Used by the aura readout too.")
                 .defineInRange("vertical_tolerance_blocks", 3.0, 1.0, 16.0);
@@ -297,6 +305,9 @@ public final class WarConfig {
                 .defineEnum("trusted_defenders", DefenderMembers.MANAGERS);
         TEAM_MEMBERS_DEFEND = b.comment("Players in the owner's FTB Teams party are defenders (needs conquest.use_ftb_teams).")
                 .define("team_members_defend", true);
+        MEMBERS_CANNOT_CAPTURE = b.comment("Players authorized in the claim through Flan (members of the claim or any of its",
+                        "subclaims) can never capture it while authorized. Removing them makes them eligible again at once.")
+                .define("trusted_members_cannot_capture", true);
         b.pop();
         b.pop();
 
@@ -340,6 +351,18 @@ public final class WarConfig {
                 .defineInRange("animation_midpoint_percent", 50, 10, 90);
         POLE_REVERSE_ON_DECAY = b.comment("Run the animation backwards while progress decays (otherwise the banner waits, then resets at 0%).")
                 .define("reverse_animation_on_decay", true);
+        b.pop();
+
+        b.comment("Tell players when a claim owner adds them to, removes them from, or changes their permissions in a",
+                "Flan claim, through any Flan command or menu. Only committed changes are announced, and rapid edits",
+                "(several clicks in the permission menu) are combined into one message after a few seconds.")
+                .push("member_notifications");
+        MEMBER_NOTICES = b.define("enabled", true);
+        MEMBER_NOTICE_ADDED = b.define("notify_on_added", true);
+        MEMBER_NOTICE_REMOVED = b.define("notify_on_removed", true);
+        MEMBER_NOTICE_CHANGED = b.define("notify_on_permission_change", true);
+        MEMBER_NOTICE_OFFLINE = b.comment("Deliver notices to offline players at their next login.")
+                .define("queue_offline_notifications", true);
         b.pop();
 
         b.comment("Live alerts when a specific claim is attacked. These are separate from the raid-window announcements.",

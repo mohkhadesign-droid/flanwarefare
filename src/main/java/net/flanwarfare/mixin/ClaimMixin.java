@@ -3,6 +3,7 @@ package net.flanwarfare.mixin;
 import io.github.flemmli97.flan.api.permission.ClaimPermission;
 import io.github.flemmli97.flan.claim.Claim;
 import net.flanwarfare.flan.Guards;
+import net.flanwarfare.flan.MemberHooks;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
@@ -43,6 +44,46 @@ public abstract class ClaimMixin {
         if (Guards.blockManagement((Claim) (Object) this)) {
             cir.setReturnValue(false);
         }
+    }
+
+    // ----- membership notices (observe only; act after Flan reports success) -----
+
+    @Inject(method = "setPlayerGroup", at = @At("HEAD"), remap = false)
+    private void flanwarfare$beforeSetGroup(UUID player, String group, boolean force,
+                                            CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.beforeSetGroup((Claim) (Object) this, player);
+    }
+
+    @Inject(method = "setPlayerGroup", at = @At("RETURN"), remap = false)
+    private void flanwarfare$afterSetGroup(UUID player, String group, boolean force,
+                                           CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.afterSetGroup((Claim) (Object) this, player, Boolean.TRUE.equals(cir.getReturnValue()));
+    }
+
+    @Inject(method = "removePermGroup", at = @At("HEAD"), remap = false)
+    private void flanwarfare$beforeRemoveGroup(ServerPlayerEntity player, String group,
+                                               CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.beforeGroupEdit((Claim) (Object) this, group);
+    }
+
+    @Inject(method = "removePermGroup", at = @At("RETURN"), remap = false)
+    private void flanwarfare$afterRemoveGroup(ServerPlayerEntity player, String group,
+                                              CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.afterGroupEdit((Claim) (Object) this, Boolean.TRUE.equals(cir.getReturnValue()), false);
+    }
+
+    @Inject(method = "editPerms(Lnet/minecraft/entity/player/ServerPlayerEntity;Ljava/lang/String;Lio/github/flemmli97/flan/api/permission/ClaimPermission;IZ)Z",
+            at = @At("HEAD"), remap = false)
+    private void flanwarfare$beforeEditPerms(ServerPlayerEntity player, String group, ClaimPermission permission,
+                                             int mode, boolean griefPrevention, CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.beforeGroupEdit((Claim) (Object) this, group);
+    }
+
+    @Inject(method = "editPerms(Lnet/minecraft/entity/player/ServerPlayerEntity;Ljava/lang/String;Lio/github/flemmli97/flan/api/permission/ClaimPermission;IZ)Z",
+            at = @At("RETURN"), remap = false)
+    private void flanwarfare$afterEditPerms(ServerPlayerEntity player, String group, ClaimPermission permission,
+                                            int mode, boolean griefPrevention, CallbackInfoReturnable<Boolean> cir) {
+        MemberHooks.afterGroupEdit((Claim) (Object) this, Boolean.TRUE.equals(cir.getReturnValue()), true);
     }
 
     @Inject(method = "setHomePos", at = @At("HEAD"), cancellable = true, remap = false)

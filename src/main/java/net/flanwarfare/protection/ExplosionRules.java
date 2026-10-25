@@ -98,10 +98,13 @@ public final class ExplosionRules {
             if (!WarConfig.ALLOW_EXPLOSION_ENTITY_DAMAGE.get()) {
                 event.getAffectedEntities().removeIf(entity -> raidableClaim(core, serverWorld, entity.getPosition()) != null);
             }
+            // Explosions set off by a player the owner authorized (e.g. their own TNT) are not raids.
+            net.minecraft.entity.LivingEntity placer = event.getExplosion().getExplosivePlacedBy();
+            UUID igniter = placer instanceof net.minecraft.entity.player.PlayerEntity ? placer.getUniqueID() : null;
             Map<UUID, Claim> damaged = new HashMap<>();
             for (BlockPos pos : event.getAffectedBlocks()) {
                 Claim claim = raidableClaim(core, serverWorld, pos);
-                if (claim != null) {
+                if (claim != null && (igniter == null || !FlanBridge.isAuthorizedAt(claim, pos, igniter))) {
                     damaged.putIfAbsent(claim.getClaimID(), claim);
                 }
             }

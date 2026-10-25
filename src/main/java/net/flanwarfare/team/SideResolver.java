@@ -242,8 +242,12 @@ public final class SideResolver {
         if (sameTeam(id, owner)) {
             return WarConfig.TEAM_MEMBERS_DEFEND.get() ? Role.DEFENDER : Role.NEUTRAL;
         }
-        if (FlanBridge.isMember(claim, id)) {
-            return isDefenderMember(claim, id) ? Role.DEFENDER : Role.NEUTRAL;
+        if (FlanBridge.isMember(claim, id) && isDefenderMember(claim, id)) {
+            return Role.DEFENDER;
+        }
+        // Authorized members (of the claim or a subclaim) cannot capture while authorized.
+        if (WarConfig.MEMBERS_CANNOT_CAPTURE.get() && FlanBridge.isMemberAnywhere(claim, id)) {
+            return Role.NEUTRAL;
         }
         return Role.ATTACKER;
     }

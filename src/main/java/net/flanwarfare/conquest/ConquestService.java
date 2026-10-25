@@ -205,6 +205,8 @@ public final class ConquestService {
                     throw new IllegalStateException("Flan refused the ownership transfer of claim " + claim.getClaimID());
                 }
             }
+            // Old members (and subclaim members) lose access: tell them before the wipe.
+            core.members().conquestRemoval(claim, FlanBridge.playerName(core.server(), txn.newOwner));
             for (Claim sub : new ArrayList<>(claim.getAllSubclaims())) {
                 claim.deleteSubClaim(sub);
             }

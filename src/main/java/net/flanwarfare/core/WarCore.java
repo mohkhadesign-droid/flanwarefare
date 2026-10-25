@@ -8,6 +8,7 @@ import net.flanwarfare.alerts.RaidAlerts;
 import net.flanwarfare.capture.CaptureAura;
 import net.flanwarfare.capture.CaptureManager;
 import net.flanwarfare.claims.ClaimLifecycle;
+import net.flanwarfare.claims.MemberNotices;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.conquest.ConquestService;
 import net.flanwarfare.data.ClaimRecord;
@@ -48,6 +49,7 @@ public final class WarCore {
     private final RaidAlerts alerts;
     private final CaptureAura aura;
     private final WarStats stats;
+    private final MemberNotices members;
     private volatile boolean ready;
     private long ticks;
     private long lastSaveTick;
@@ -65,6 +67,7 @@ public final class WarCore {
         this.alerts = new RaidAlerts(this);
         this.aura = new CaptureAura(this);
         this.stats = new WarStats(this);
+        this.members = new MemberNotices(this);
     }
 
     /** The current core, possibly in safe mode. */
@@ -137,6 +140,7 @@ public final class WarCore {
         flags.tick(ticks);
         capture.tick(ticks);
         aura.tick(ticks);
+        members.tick(ticks);
         if (data.isDirty() && ticks - lastSaveTick >= 200) {
             saveNow();
         }
@@ -230,6 +234,10 @@ public final class WarCore {
 
     public WarStats stats() {
         return stats;
+    }
+
+    public MemberNotices members() {
+        return members;
     }
 
     /** Live state of a claim (see {@link ClaimWarState}). */

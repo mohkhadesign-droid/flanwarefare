@@ -96,10 +96,13 @@ public final class RaidPermissions {
         if (!record.isWarEnabled()) {
             return;
         }
+        // Players the owner authorized through Flan (owner, claim members, members of the
+        // subclaim at this spot) keep exactly the permissions Flan gives them: never widened,
+        // never restricted, never reported as raiders. Same for actions Flan already allows
+        // everyone in this claim.
         UUID id = player.getUniqueID();
-        boolean insider = !(player instanceof FakePlayer)
-                && (id.equals(claim.getOwner()) || FlanBridge.isMember(claim, id));
-        if (insider) {
+        boolean authorized = !(player instanceof FakePlayer) && FlanBridge.isAuthorizedAt(claim, event.pos, id);
+        if (authorized || FlanBridge.allowedForEveryone(claim, event.pos, permission)) {
             return;
         }
         if (core.raid().isRaidPermission(permission)) {

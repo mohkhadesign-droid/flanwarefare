@@ -43,6 +43,7 @@ public final class LogicSelfTest {
         rankingOrder();
         captureTimeChange();
         flagAnimation();
+        membershipChanges();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -474,6 +475,24 @@ public final class LogicSelfTest {
         }
         check(monotonic, "owner banner only descends before the midpoint");
         eq(new FlagAnimation.Frame(1, false), FlagAnimation.frame(0.45, 50, 4), "decay below 50%: owner design again");
+    }
+
+    private static void membershipChanges() {
+        eq(MembershipChange.Type.ADDED, MembershipChange.classify(null, "trusted", false), "added");
+        eq(MembershipChange.Type.REMOVED, MembershipChange.classify("trusted", null, false), "removed");
+        eq(MembershipChange.Type.CHANGED, MembershipChange.classify("trusted", "builder", false), "moved to another group");
+        eq(MembershipChange.Type.CHANGED, MembershipChange.classify("trusted", "trusted", true), "group permissions edited");
+        eq(MembershipChange.Type.NONE, MembershipChange.classify("trusted", "trusted", false), "no real change: silent");
+        eq(MembershipChange.Type.NONE, MembershipChange.classify(null, null, false),
+                "removing a non-member / added then removed within seconds: silent");
+        eq(MembershipChange.Type.NONE, MembershipChange.combine(MembershipChange.Type.ADDED, MembershipChange.Type.REMOVED),
+                "offline: added then removed cancels out");
+        eq(MembershipChange.Type.CHANGED, MembershipChange.combine(MembershipChange.Type.REMOVED, MembershipChange.Type.ADDED),
+                "offline: removed then re-added = still a member, permissions may differ");
+        eq(MembershipChange.Type.ADDED, MembershipChange.combine(MembershipChange.Type.ADDED, MembershipChange.Type.CHANGED),
+                "offline: added then edited is still added");
+        eq(MembershipChange.Type.REMOVED, MembershipChange.combine(MembershipChange.Type.CHANGED, MembershipChange.Type.REMOVED),
+                "offline: changed then removed = removed");
     }
 
     private static Set<UUID> set(UUID... ids) {

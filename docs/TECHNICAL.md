@@ -438,3 +438,65 @@ achievements only.
 The installed FTB Teams JAR has not been inspected yet. Its exact API (`getPlayerTeam`, team
 `getId`, `getType`/`isPartyTeam`, display name) should be verified against it, the same way Flan
 was. `/war admin status` reports what was detected.
+
+## 19. Flan authorization, member notices, 3-block radius
+
+**Radius.** `capture.radius_blocks` now defaults to 3. It is still the only radius setting,
+shared by detection, contesting, the ring and the readout. `min_flag_distance` defaults to 7, so
+two zones never overlap.
+
+**Who counts as authorized.** Everything is read live from Flan on every check; there is no
+second permission database.
+
+- `FlanBridge.isAuthorizedAt(claim, pos, player)` is true for the owner, a member of the claim,
+  or a member of the subclaim containing `pos`.
+- `allowedForEveryone(claim, pos, permission)` mirrors Flan 1.7.2's `Claim.hasPerm`: the
+  subclaim's claim-wide value, falling back to the parent's when unset.
+
+**Raid permissions.** For an authorized player, or an action Flan already allows everyone, the
+add-on returns PASS: Flan's exact answer stands, never widened or narrowed, and no raid alert.
+Only unauthorized players get the raid permissions and can trigger alerts.
+
+**Explosions.** An explosion set off by an authorized player, judged by `Explosion` "placed by"
+(for example their own TNT), is not reported as a raid.
+
+**Capture eligibility.** `SideResolver.roleOf` treats Flan members of the claim or any subclaim
+as neutral while `trusted_members_cannot_capture` is on: they cannot capture. Defender members
+(per `trusted_defenders`) contest. Roles are recomputed at every evaluation from live Flan data,
+so adding or removing someone mid-capture changes their role on the next check (at most 0.5 s),
+without resetting progress, and nobody counts as both.
+
+**Conquered claims.** Management still goes through Flan: for an ACTIVE claim the add-on passes
+EDITCLAIM, EDITPERMS and EDITPOTIONS, so Flan lets the owner manage it. The only conquered-claim
+restrictions are `resizeClaim` and `transferOwner`; subclaim creation is not affected. Conquest
+clears old members but blacklists nobody, so the new owner can re-invite the previous owner like
+anyone else.
+
+**Member notices.** Flan 1.7.2 has no membership event, so `ClaimMixin` observes the three
+mutators all paths use:
+
+| Method | Covers |
+|---|---|
+| `setPlayerGroup(UUID, String, boolean)` | Add, move between groups, and remove (null group). Called by `/flan addPlayer`, `removePlayer`, `forceAddPlayer` and the group-player menu |
+| `removePermGroup(ServerPlayerEntity, String)` | Deletes a group together with its members |
+| `editPerms(…, String, ClaimPermission, int, boolean)` | Permission edits of a group |
+
+The hooks work like this:
+
+- at HEAD, the affected players' current group is remembered;
+- at RETURN, the change is marked only if Flan returned true. A cancelled or failed call marks
+  nothing.
+- About 3 s after the last change, `MembershipChange.classify(before, after, groupEdited)`
+  yields ADDED, REMOVED, CHANGED or NONE. NONE covers, for example, "removing" a non-member,
+  which Flan reports as success, or adding and removing within seconds.
+
+Offline players get one net notice per claim, merged with `MembershipChange.combine`: added then
+removed cancels out, and removed then re-added becomes "permissions updated". At most 20 are
+kept, and they are delivered at login.
+
+Conquest clears members directly, not through Flan's mutators, so it sends its own "access
+ended" notice before the wipe.
+
+**Limitation.** A Flan permission edit that changes nothing still marks the group as edited.
+Flan reports success without saying whether the value changed, so an occasional redundant
+"permissions updated" message is possible.

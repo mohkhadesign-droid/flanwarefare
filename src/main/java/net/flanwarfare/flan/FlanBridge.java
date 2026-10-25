@@ -68,6 +68,46 @@ public final class FlanBridge {
         return members(claim).containsKey(player);
     }
 
+    /** Member of the parent claim or of any of its subclaims (live Flan data). */
+    public static boolean isMemberAnywhere(Claim parent, UUID player) {
+        if (isMember(parent, player)) {
+            return true;
+        }
+        for (Claim sub : parent.getAllSubclaims()) {
+            if (isMember(sub, player)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Authorized by the owner at this position: the owner, a member of the parent claim, or a
+     * member of the subclaim containing the position. Read live from Flan every time, so adding
+     * or removing someone takes effect immediately.
+     */
+    public static boolean isAuthorizedAt(Claim parent, BlockPos pos, UUID player) {
+        if (player.equals(parent.getOwner()) || isMember(parent, player)) {
+            return true;
+        }
+        Claim sub = parent.getSubClaim(pos);
+        return sub != null && isMember(sub, player);
+    }
+
+    /**
+     * True if Flan already allows this permission for everyone at the position (the claim-wide
+     * setting, falling back to the parent for unset subclaim values), mirroring Claim.hasPerm in
+     * Flan 1.7.2. Such actions are never treated as hostile and never overridden.
+     */
+    public static boolean allowedForEveryone(Claim parent, BlockPos pos, ClaimPermission permission) {
+        Claim sub = parent.getSubClaim(pos);
+        if (sub != null) {
+            int own = sub.permEnabled(permission);
+            return own == -1 ? parent.permEnabled(permission) == 1 : own == 1;
+        }
+        return parent.permEnabled(permission) == 1;
+    }
+
     /** True if the player's Flan group on this claim grants claim management. */
     public static boolean isManager(Claim claim, UUID player) {
         String group = members(claim).get(player);

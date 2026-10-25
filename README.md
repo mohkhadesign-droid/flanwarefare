@@ -11,7 +11,7 @@ war history.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 127
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 137
 > automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
@@ -78,7 +78,7 @@ Admin claims (your spawn), excluded claims, disabled dimensions and other protec
 ### Capture zone, capturing and defending
 
 Every capturable flag shows a **ring of particles** on the ground: that is the capture zone,
-2 blocks around the pole's base. Everyone within 48 blocks sees it: owner, defenders, raiders and
+3 blocks around the pole's base. Everyone within 48 blocks sees it: owner, defenders, raiders and
 bystanders. Stand at ground level by the pole; you don't climb to the banner. Players more than
 3 blocks above or below the base, on a roof or in a tunnel, don't count. The ring is drawn with the same radius the server uses to detect
 players, from one shared setting. Its colour shows the state:
@@ -188,6 +188,25 @@ Seasons are started, ended and archived by admins. Archived seasons stay viewabl
 `/war seasons`. Resetting or ending a season never touches claims, owners, slots, immunity or
 flags.
 
+### Managing a conquered claim, and member notices
+
+The conqueror is the normal Flan owner. They use Flan's own menu and commands to trust players,
+set groups and permissions, and create subclaims. They can invite anyone, including the previous
+owner. The only things they can't do are resize the claim or transfer it.
+
+Players hear about it whenever an owner adds them to a claim, removes them, or changes their
+permissions through any Flan menu or command:
+
+- "You have been added to Ali's claim: "Northern Fortress"…", with an action-bar line;
+- "…removed from…";
+- "Your permissions in … have been updated."
+
+Only changes Flan actually saved are announced. Several clicks in a row become one message after
+about 3 seconds, and a change that undoes itself says nothing.
+
+Members of a claim that gets conquered are told their access ended. Offline players get their
+notices at the next login.
+
 ### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
@@ -200,6 +219,11 @@ flags.
 
   A member trusted for less (say, one chest) is neutral: they can neither defend nor capture
   that claim.
+- **Players the owner trusted in Flan** keep exactly the permissions Flan gives them, raid or no
+  raid. They never set off raid alerts, and they can't capture that claim while they're trusted.
+  That covers members of the claim or of any of its subclaims, from any kingdom. The same goes
+  for anything Flan already allows everyone in that claim. Remove someone in Flan and they're
+  treated like any outsider straight away.
 - **Who gets the claim:** the first player of the capturing side to reach the flag, while they
   stay. If they leave, it goes to the longest continuously present teammate, with ties broken by
   UUID. Never random.
@@ -293,7 +317,7 @@ values are:
 | `flags.inactive_claim_expiration_seconds` | `86400` | Lifetime of claims without a flag |
 | `flags.auto_abandon_expired_claims` | `false` | Delete expired claims through Flan |
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
-| `capture.radius_blocks` | `2.0` | **The** capture radius: detection, contesting, aura and distance readout |
+| `capture.radius_blocks` | `3.0` | **The** capture radius: detection, contesting, aura and distance readout |
 | `capture.vertical_tolerance_blocks` | `3.0` | How far above/below the pole base still counts |
 | `flagpole.enabled` / `height_blocks` / `pole_block` | `true` / `4` / `minecraft:dark_oak_fence` | New and moved flags only |
 | `flagpole.animated_capture` / `animation_midpoint_percent` / `reverse_animation_on_decay` | `true` / `50` / `true` | |
@@ -301,6 +325,9 @@ values are:
 | `capture.contest_by_rival_attackers` | `true` | |
 | `capture.defenders.enabled` / `owner_can_contest` / `team_members_defend` | `true` | |
 | `capture.defenders.trusted_defenders` | `MANAGERS` | `MANAGERS`, `ALL_MEMBERS` or `NONE` |
+| `capture.defenders.trusted_members_cannot_capture` | `true` | Flan members of a claim can't capture it |
+| `member_notifications.enabled` / `notify_on_added` / `notify_on_removed` / `notify_on_permission_change` / `queue_offline_notifications` | `true` | |
+| `flags.min_flag_distance` | `7` | Keeps 3-block capture zones apart |
 | `capture_aura.enabled` / `particle_interval_ticks` / `visibility_distance_blocks` | `true` / `10` / `48` | Seen by every nearby player |
 | `capture_aura.show_immunity_aura` | `true` | |
 | `capture_aura.show_idle_aura` / `show_active_aura` / `show_contested_aura` / `show_completion_effect` | `true` | |

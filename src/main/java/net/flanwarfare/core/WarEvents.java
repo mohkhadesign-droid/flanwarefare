@@ -139,6 +139,7 @@ public final class WarEvents {
         ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
         Msg.send(player, Msg.info(core.raid().statusLine()));
         core.alerts().loginSummary(player);
+        core.members().loginDelivery(player);
         List<ClaimRecord> pending = core.lifecycle().pendingOf(player.getUniqueID());
         if (!pending.isEmpty()) {
             Msg.send(player, Msg.warn("You have " + pending.size() + " inactive claim(s) without a flag. "

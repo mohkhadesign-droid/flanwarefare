@@ -44,6 +44,7 @@ public final class WarData {
         /** The current season (possibly ended but not yet archived); null between seasons. */
         Season season;
         int seasonCounter;
+        Map<UUID, List<MemberNotice>> memberNotices = new HashMap<>();
     }
 
     private static final int MAX_ALERTS_PER_PLAYER = 20;
@@ -92,6 +93,9 @@ public final class WarData {
             }
             if (loaded.mutedAlerts == null) {
                 loaded.mutedAlerts = new ArrayList<>();
+            }
+            if (loaded.memberNotices == null) {
+                loaded.memberNotices = new HashMap<>();
             }
             loaded.claims.values().removeIf(r -> r == null || r.claimId == null || r.dimension == null);
             data.state = loaded;
@@ -220,6 +224,19 @@ public final class WarData {
         }
         dirty = true;
         return list;
+    }
+
+    /** Pending membership notices of an offline player (live list, may be modified). */
+    public List<MemberNotice> memberNotices(UUID player) {
+        return state.memberNotices.computeIfAbsent(player, p -> new ArrayList<>());
+    }
+
+    public List<MemberNotice> takeMemberNotices(UUID player) {
+        List<MemberNotice> list = state.memberNotices.remove(player);
+        if (list != null) {
+            dirty = true;
+        }
+        return list == null ? new ArrayList<MemberNotice>() : list;
     }
 
     public Season season() {

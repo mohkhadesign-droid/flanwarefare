@@ -68,6 +68,22 @@ public class Claim {
         throw new UnsupportedOperationException("stub");
     }
 
+    public int permEnabled(ClaimPermission perm) {
+        throw new UnsupportedOperationException("stub");
+    }
+
+    public Claim getSubClaim(BlockPos pos) {
+        throw new UnsupportedOperationException("stub");
+    }
+
+    public boolean editPerms(ServerPlayerEntity player, String group, ClaimPermission perm, int mode, boolean griefPrevention) {
+        throw new UnsupportedOperationException("stub");
+    }
+
+    public boolean removePermGroup(ServerPlayerEntity player, String group) {
+        throw new UnsupportedOperationException("stub");
+    }
+
     public Set<Claim> tryCreateSubClaim(BlockPos pos1, BlockPos pos2) {
         throw new UnsupportedOperationException("stub");
     }
