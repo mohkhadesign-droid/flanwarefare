@@ -254,7 +254,7 @@ public final class RankCommand {
                             }
                             GameProfile target = oneProfile(ctx);
                             return core.ranks().assign(registry, target.getId(), target.getName(), r, true, actor);
-                        }, "Rank assigned.")))))
+                        }, "Rank assigned."))))))
                 .then(Commands.literal("remove").then(Commands.argument("player", GameProfileArgument.gameProfile())
                         .executes(ctx -> {
                             WarCore core = readyOrFail(ctx);
