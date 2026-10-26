@@ -113,7 +113,7 @@ public final class FlagRenderer extends TileEntityRenderer<FlagTileEntity> {
         stack.scale(0.8F, -0.8F, -0.8F);
         fabric.rotationPointY = -32.0F;
         fabric.rotateAngleX = 0.0F;
-        BannerTileEntityRenderer.renderPatterns(stack, buffers, light, overlay, fabric, ModelBakery.LOCATION_BANNER_BASE,
+        BannerTileEntityRenderer.func_230180_a_(stack, buffers, light, overlay, fabric, ModelBakery.LOCATION_BANNER_BASE,
                 true, te.patternLayers());
         stack.pop();
 

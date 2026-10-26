@@ -33,13 +33,6 @@ jobs:
             echo "::error title=Build output::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' "$f")"
           done
 
-      - name: Probe (temporary)
-        if: always()
-        run: |
-          JAR=$(find ~/.gradle/caches -name "forge-1.16.5-*_mapped_snapshot_*.jar" ! -name "*sources*" | head -n 1)
-          javap -cp "$JAR" net.minecraft.client.renderer.tileentity.BannerTileEntityRenderer | sed 's/^ *//' > probe.txt || true
-          echo "::notice title=probe::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' probe.txt | cut -c1-3900)"
-
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
