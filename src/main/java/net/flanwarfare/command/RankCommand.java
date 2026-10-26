@@ -424,7 +424,7 @@ public final class RankCommand {
     private static IFormattableTextComponent rankLine(WarCore core, RankRegistry registry, RankDef r) {
         int holders = core.ranks().holders(registry, r).size();
         IFormattableTextComponent line = new StringTextComponent(" - ").mergeStyle(TextFormatting.GRAY);
-        line.append(RankRenderer.tag(r, core.rankDisplay().phase()));
+        line.appendSibling(RankRenderer.tag(r, core.rankDisplay().phase()));
         StringBuilder details = new StringBuilder("  [id ").append(r.id).append(", ");
         details.append(r.colors.size() > 1 ? "gradient of " + r.colors.size() : RankColors.format(r.colors.isEmpty() ? 0xFFFFFF : r.colors.get(0)));
         if (!"NONE".equals(r.effect)) {
@@ -432,7 +432,7 @@ public final class RankCommand {
         }
         details.append(", ").append(r.position == null ? "default position" : r.position.toLowerCase());
         details.append(", ").append(holders).append(holders == 1 ? " holder]" : " holders]");
-        line.append(new StringTextComponent(details.toString()).mergeStyle(TextFormatting.DARK_GRAY));
+        line.appendSibling(new StringTextComponent(details.toString()).mergeStyle(TextFormatting.DARK_GRAY));
         return line;
     }
 
@@ -475,9 +475,9 @@ public final class RankCommand {
             boolean suspended = !core.ranks().eligible(registry, e.getKey());
             IFormattableTextComponent line = new StringTextComponent(" - " + FlanBridge.playerName(core.server(), e.getKey()) + " ")
                     .mergeStyle(TextFormatting.WHITE);
-            line.append(RankRenderer.tag(r, 0));
+            line.appendSibling(RankRenderer.tag(r, 0));
             if (suspended) {
-                line.append(new StringTextComponent("  (suspended: not a Flan member of this kingdom)").mergeStyle(TextFormatting.RED));
+                line.appendSibling(new StringTextComponent("  (suspended: not a Flan member of this kingdom)").mergeStyle(TextFormatting.RED));
             }
             p.sendMessage(line, Util.DUMMY_UUID);
             shown++;
@@ -496,9 +496,9 @@ public final class RankCommand {
         RankDef r = registry.ranks.get(registry.assignments.get(target.getId()));
         IFormattableTextComponent line = new StringTextComponent("[War] " + target.getName() + ": ").mergeStyle(TextFormatting.GOLD);
         if (r != null) {
-            line.append(RankRenderer.tag(r, core.rankDisplay().phase()));
+            line.appendSibling(RankRenderer.tag(r, core.rankDisplay().phase()));
         }
-        line.append(new StringTextComponent(" in " + core.ranks().kingdomName(registry)).mergeStyle(TextFormatting.GOLD));
+        line.appendSibling(new StringTextComponent(" in " + core.ranks().kingdomName(registry)).mergeStyle(TextFormatting.GOLD));
         ctx.getSource().sendFeedback(line, false);
         RankService.Active active = core.ranks().active(target.getId());
         if (active == null) {
@@ -524,14 +524,14 @@ public final class RankCommand {
         }
         Msg.send(p, Msg.info("Preview of '" + r.name + "' (animated effects move on nametags; chat shows one frame):"));
         IFormattableTextComponent tag = new StringTextComponent("  Tag: ").mergeStyle(TextFormatting.GRAY);
-        tag.append(RankRenderer.tag(r, core.rankDisplay().phase()));
+        tag.appendSibling(RankRenderer.tag(r, core.rankDisplay().phase()));
         p.sendMessage(tag, Util.DUMMY_UUID);
         IFormattableTextComponent left = new StringTextComponent("  Nametag (left): ").mergeStyle(TextFormatting.GRAY);
-        left.append(RankRenderer.leftPrefix(r, core.rankDisplay().phase()));
-        left.append(new StringTextComponent(p.getGameProfile().getName()).mergeStyle(TextFormatting.WHITE));
+        left.appendSibling(RankRenderer.leftPrefix(r, core.rankDisplay().phase()));
+        left.appendSibling(new StringTextComponent(p.getGameProfile().getName()).mergeStyle(TextFormatting.WHITE));
         p.sendMessage(left, Util.DUMMY_UUID);
         IFormattableTextComponent chat = new StringTextComponent("  Chat: ").mergeStyle(TextFormatting.GRAY);
-        chat.append(RankRenderer.chat(r, core.rankDisplay().phase(), p.getGameProfile().getName(), "Hello kingdom!"));
+        chat.appendSibling(RankRenderer.chat(r, core.rankDisplay().phase(), p.getGameProfile().getName(), "Hello kingdom!"));
         p.sendMessage(chat, Util.DUMMY_UUID);
         return 1;
     }

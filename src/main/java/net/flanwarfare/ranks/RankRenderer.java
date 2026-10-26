@@ -74,7 +74,7 @@ public final class RankRenderer {
             if (scramble) {
                 part.mergeStyle(TextFormatting.OBFUSCATED); // decorations stay readable
             }
-            root.append(part);
+            root.appendSibling(part);
             i = j;
         }
         return root;
@@ -85,7 +85,7 @@ public final class RankRenderer {
         IFormattableTextComponent prefix = tag(rank, phase);
         String separator = WarConfig.RANK_SEPARATOR.get();
         if (!separator.isEmpty()) {
-            prefix.append(new StringTextComponent(separator).mergeStyle(TextFormatting.DARK_GRAY));
+            prefix.appendSibling(new StringTextComponent(separator).mergeStyle(TextFormatting.DARK_GRAY));
         }
         return prefix;
     }
@@ -99,13 +99,13 @@ public final class RankRenderer {
         IFormattableTextComponent line = new StringTextComponent("");
         for (RankRules.Token token : RankRules.tokenize(format)) {
             if (!token.placeholder) {
-                line.append(new StringTextComponent(token.text).mergeStyle(TextFormatting.GRAY));
+                line.appendSibling(new StringTextComponent(token.text).mergeStyle(TextFormatting.GRAY));
             } else if (token.text.equals("rank")) {
-                line.append(tag(rank, phase));
+                line.appendSibling(tag(rank, phase));
             } else if (token.text.equals("player")) {
-                line.append(new StringTextComponent(playerName).mergeStyle(TextFormatting.WHITE));
+                line.appendSibling(new StringTextComponent(playerName).mergeStyle(TextFormatting.WHITE));
             } else {
-                line.append(ForgeHooks.newChatWithLinks(message));
+                line.appendSibling(ForgeHooks.newChatWithLinks(message));
             }
         }
         return line;
