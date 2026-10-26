@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "type": "bitmap",
+      "file": "grandtab:font/logo.png",
+      "height": 56,
+      "ascent": 7,
+      "chars": [""]
+    }
+  ]
+}
