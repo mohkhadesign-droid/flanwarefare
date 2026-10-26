@@ -16,6 +16,8 @@ import net.flanwarfare.data.WarData;
 import net.flanwarfare.flag.FlagService;
 import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.raid.RaidScheduler;
+import net.flanwarfare.ranks.RankDisplay;
+import net.flanwarfare.ranks.RankService;
 import net.flanwarfare.stats.WarStats;
 import net.flanwarfare.team.SideResolver;
 import net.flanwarfare.util.Msg;
@@ -50,6 +52,8 @@ public final class WarCore {
     private final CaptureAura aura;
     private final WarStats stats;
     private final MemberNotices members;
+    private final RankService ranks;
+    private final RankDisplay rankDisplay;
     private volatile boolean ready;
     private long ticks;
     private long lastSaveTick;
@@ -68,6 +72,8 @@ public final class WarCore {
         this.aura = new CaptureAura(this);
         this.stats = new WarStats(this);
         this.members = new MemberNotices(this);
+        this.ranks = new RankService(this);
+        this.rankDisplay = new RankDisplay(this);
     }
 
     /** The current core, possibly in safe mode. */
@@ -114,6 +120,7 @@ public final class WarCore {
         core.stats.init();
         core.conquest.recoverPendingTransactions();
         core.lifecycle.reconcileAll();
+        core.ranks.pruneOrphans();
         WarStats.Report report = core.stats.check();
         for (String warning : report.warnings) {
             FlanWarfare.LOG.warn("Statistics check: {} - run /war admin stats check for details", warning);
@@ -121,6 +128,7 @@ public final class WarCore {
         core.flags.rebuildIndex();
         core.flags.refreshAllOnLoad();
         core.raid.initialise();
+        core.rankDisplay.start();
         core.ready = true;
         core.saveNow();
         FlanWarfare.LOG.info("Flan Warfare {} ready: {} claim records, raid mode {}, capture radius {} blocks, "
@@ -132,6 +140,7 @@ public final class WarCore {
         WarCore core = instance;
         if (core != null && core.ready) {
             core.capture.clearAll();
+            core.rankDisplay.stop();
             core.saveNow();
         }
         instance = null;
@@ -148,6 +157,7 @@ public final class WarCore {
         capture.tick(ticks);
         aura.tick(ticks);
         members.tick(ticks);
+        rankDisplay.tick(ticks);
         if (data.isDirty() && ticks - lastSaveTick >= 200) {
             saveNow();
         }
@@ -241,6 +251,14 @@ public final class WarCore {
 
     public WarStats stats() {
         return stats;
+    }
+
+    public RankService ranks() {
+        return ranks;
+    }
+
+    public RankDisplay rankDisplay() {
+        return rankDisplay;
     }
 
     public MemberNotices members() {

@@ -18,7 +18,19 @@ jobs:
       - name: Build and run logic tests
         run: |
           chmod +x gradlew
-          ./gradlew build --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Report compile errors as annotations
+        if: failure()
+        run: |
+          grep -E "error:" -A3 build.log | grep -vE "^\s*\^\s*$" | head -n 80 | cut -c1-400 > errors.txt || true
+          grep -E "What went wrong|check failed" -A2 build.log | head -n 6 >> errors.txt || true
+          split -l 8 errors.txt chunk_ || true
+          for f in chunk_*; do
+            [ -f "$f" ] || continue
+            echo "::error title=Build output::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' "$f")"
+          done
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4

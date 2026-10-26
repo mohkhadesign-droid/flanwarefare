@@ -183,6 +183,7 @@ public final class ConquestService {
             announce(label, oldOwner, winner);
             core.alerts().conquered(alertRecipients, oldOwner, record, label, FlanBridge.playerName(core.server(), winner));
             core.aura().conquestEffect(record);
+            core.ranks().ownerChanged(record.claimId, oldOwner, winner);
             return true;
         } finally {
             locked = null;

@@ -555,3 +555,120 @@ empty, and a `.bak` of the previous file is kept on every save.
 - `/war status`.
 
 Local builds show "local".
+
+## 21. Kingdom ranks, chat tags and nametags
+
+**Data** (`war_data.json`, new fields default to empty, so old files load unchanged):
+
+- `rankRegistries`: main-claim UUID mapped to a `RankRegistry`, which holds:
+  - `ranks`, an ordered map of stable id (`r…`) to `RankDef`. A `RankDef` has a name, colours
+    (one colour, or 2 to 5 gradient stops), an effect, a prefix, a suffix and a default position.
+  - `assignments`: player UUID to rank id.
+  - `positionOverrides`: player UUID to LEFT/ABOVE/BELOW.
+- `mainClaims`: player UUID to the main claim they designated.
+- On load, null collections are repaired and assignments to missing rank ids are dropped.
+
+Ids never change, so renaming a rank keeps every assignment. Deleting a rank removes its
+assignments.
+
+**Authority, read live from Flan on every check (no copy that could disagree):**
+
+- **Manager:** the current Flan owner of the registry's claim, or an admin
+  (`general.admin_permission_level`).
+- **Command context:** a registry claim the player owns and stands in, otherwise their designated
+  main claim if they still own it. Admins: any registry claim they stand in, or
+  `/war admin rank …` with a kingdom argument.
+- **Eligible holder:** the claim's owner, or a player with an explicit Flan group in the claim or
+  any of its subclaims (`FlanBridge.isMemberAnywhere`). Players who only have public
+  permissions are not members.
+  - If someone is no longer eligible, their assignment is kept but `active()` returns nothing,
+    so they're **suspended**.
+  - When they become a member again, the rank reappears within 2 seconds.
+  - With `require_membership = false`, anyone may hold a rank.
+- **One rank per player server-wide.** Owners cannot take members of another kingdom. Admins
+  can, and the old assignment is removed.
+- **Ranks never call into Flan's permission API.** Nothing is granted or denied by a rank.
+
+**Conquest and deletion:**
+
+- **Conquest:** management follows `claim.getOwner()`, so a conquest hands the registry to the
+  conqueror automatically. `ConquestService` calls `RankService.ownerChanged` only to notify the
+  two players. A rollback reverses it the same way. Assignments stay; holders who aren't members
+  after the transfer are suspended.
+- **Deletion:** when `ClaimLifecycle.reconcileAll` finds the claim gone, it calls
+  `RankService.claimDeleted`, which removes the registry and the `mainClaims` pointers.
+  `pruneOrphans` does the same at startup.
+
+**Rendering** (`RankRenderer`, `RankColors`):
+
+- Text is `prefix + " " + name + " " + suffix`, one colour per code point.
+  - A gradient interpolates linearly across all characters.
+  - Runs of equal colour are merged into one component.
+  - Colours are 1.16 RGB `Color.fromInt`, understood by unmodified clients.
+- **Effects:**
+  - BOLD sets the bold style.
+  - GLOW brightens the colours by 35 % and adds bold. Vanilla has no text glow; entity glowing
+    only outlines a model, and the labels have none.
+  - OBFUSCATED scrambles the name only, keeping the decorations readable.
+  - RAINBOW, PULSE and WAVE are frames: `RankDisplay.phase()` advances one twelfth of a cycle
+    every `animation_update_interval_ticks` (default 20 ticks, so one cycle takes 12 s).
+  - A frame is sent only if its JSON differs from the last one sent.
+- **Validation:**
+  - Names: letters, digits, spaces and `- _ ' . &`; no double spaces; max length.
+  - Decorations: control, format, private-use and unassigned characters are refused, as is `§`.
+    Code points above U+FFFF are refused too, because the 1.16 font can't draw them. An optional
+    symbol allow-list applies.
+
+**Display** (`RankDisplay`):
+
+| Position | Mechanism | Notes |
+|---|---|---|
+| LEFT | Per-player scoreboard team `fwr` + 13 hex chars of the UUID, with the tag + separator as prefix | Vanilla shows it on the nametag and in the tab list. Players already in a foreign team are left alone and fall back to BELOW. Our teams are removed at start and stop, and only names matching `fwr[0-9a-f]{13}` are ever touched. |
+| BELOW | Marker armour stand (invisible, no gravity, invulnerable, zero size) riding the player | Passenger offset 0.75 × player height, so the name is about 1.85 blocks above the feet, under the player's own name at 2.3. |
+| ABOVE | Two radius-0 area-effect clouds (height 0.5, no particles, infinite duration), then a marker stand, stacked on the player | Name at about 2.6 blocks, above the player's name. |
+
+Why the label entities are safe:
+
+- **No hitbox.** Marker stands and clouds aren't `canBeCollidedWith`, so they never absorb
+  attacks, arrows or clicks in PvP.
+- **Smooth movement.** Passengers are positioned by each client from the vehicle every frame.
+- **Not saved to chunks while riding.** Players aren't saved in chunks, and passengers are saved
+  only inside their vehicle. A player's own file can list them under `Passengers`, but player
+  loading ignores that list.
+- **Strays are refused.** Every label carries the tag `flanwarfare_rank_label`. A tagged entity
+  this session didn't create is cancelled in `EntityJoinWorldEvent`, also before the add-on is
+  ready, so crash leftovers are dropped from chunks.
+- **Removal:** on logout, death, respawn (new player object), dimension change and server stop.
+- **Validation every 5 ticks.** It checks each link (alive, same world, riding the right
+  entity); a broken chain is rebuilt. Vanilla dismounts living passengers under water, so a
+  chain broken while the player is in water is held until they leave it.
+- **Hiding:** sneaking or invisible players get `customNameVisible = false`. Spectators and dead
+  players get no label.
+
+Per-player state is recomputed every 40 ticks and immediately after any rank change, which
+covers Flan membership changes and config reloads. Position resolution is `RankRules.resolve`:
+the personal override if allowed, then the rank default, then the global default. ABOVE or BELOW
+fall back to LEFT when the server disables them.
+
+**Chat.** `ServerChatEvent` (normal priority) replaces the component with the configured format:
+
+- literal text in grey;
+- the tag at the current frame;
+- the player's plain name;
+- the message through `ForgeHooks.newChatWithLinks` (Forge's own URL handling).
+
+Players without an active rank keep the vanilla line. The config value is validated when it's loaded (each
+placeholder exactly once). Forge replaces an invalid format with the default.
+
+**Commands:** `/war rank …` and `/war admin rank …` (see the README). Rank arguments accept
+quoted names or ids. Player arguments use `GameProfileArgument`, so offline players known to
+the profile cache work.
+
+**Limitations:**
+
+- **Fixed label heights.** Vanilla offers no per-entity name offset.
+- **Chat shows one frame.** It cannot animate after sending.
+- **Display names.** A LEFT prefix also appears wherever vanilla prints the display name (death
+  messages, for example).
+- **Untested in game.** The display mechanics follow vanilla 1.16.5 behaviour, but no in-game
+  test has run yet (see `docs/TESTING.md`, F1–F26).
