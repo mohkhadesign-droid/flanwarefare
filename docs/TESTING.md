@@ -257,6 +257,27 @@ Actions build as part of `./gradlew build`).
 | F25 | `rename "Royal Guard" Elite Guard` | All holders show the new name immediately; ids unchanged. |
 | F26 | Grant and revoke ranks while checking Flan access (doors, containers, `/flan` permissions) | Flan access identical with and without ranks. |
 
+## Flag model (Flan Warfare Flags) scenarios (all NOT RUN)
+
+Install `flanwarfareflags-*.jar` on the server and the client.
+
+| # | Scenario | Expected |
+|---|---|---|
+| M1 | `/flag place` facing north/east/south/west | Model built: pedestal on the ground, pole about 6 blocks, banner front towards where you faced, whole assembly rotated together. |
+| M2 | Look from front, back, both sides, from above and below, at the screen edge | Back of the cloth visible with the pole running down behind it; no missing faces, no flicker; the top never disappears while the base is visible. |
+| M3 | Compare with the reference picture | About 3.25 blocks of bare pole under a 1 × 2 banner; crossbar slightly wider than the banner; gold finial on top. |
+| M4 | `/flag design set` with a loom banner, `/flag design apply` | Banner on the model shows that design on both sides. |
+| M5 | Capture: attacker in the ring | Banner slides smoothly down; at 50 % switches to the attacker's design at the bottom; rises to the top at 100 %; owner changes. Contested: stops. Decay: slides back. |
+| M6 | Walk around and into the flag; jump onto the pedestal | Only the pedestal and thin pole collide; nothing at banner height blocks you. |
+| M7 | Try to break any part, place blocks in the column, explode TNT next to it during and outside raids | Protected exactly like the old flag; restored within 5 s if a modded machine removes a part. |
+| M8 | `/flag move`, `/war admin flag relocate`, delete the claim in Flan | Old model removed, new one built / removed. No leftover blocks. |
+| M9 | Existing fence flags after installing the mod | Converted when their chunk loads; a flag with a blocked column keeps its fence form (logged). |
+| M10 | `flagpole.style = "BLOCKS"`, restart | New and existing flags use fence + wall banner. |
+| M11 | Remove the mod from the server | Flags fall back to fence poles. |
+| M12 | Client without the mod joins | Refused by Forge (mod required). |
+| M13 | Dedicated server log at startup | No client-class errors (renderer only loaded on clients). |
+| M14 | 10+ flags in view | No noticeable FPS drop. |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.

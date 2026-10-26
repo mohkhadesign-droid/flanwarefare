@@ -265,7 +265,7 @@ public final class CaptureManager {
             session.attackerDesign = core.flags().designFor(capturer);
         }
         FlagAnimation.Frame frame = FlagAnimation.frame(session.model.fraction(), WarConfig.POLE_MIDPOINT.get(),
-                record.poleHeight);
+                net.flanwarfare.flag.FlagStructure.of(record).animationLevels());
         String design = record.designSnbt;
         if (frame.attacker) {
             design = session.attackerDesign != null ? session.attackerDesign : BannerDesigns.defaultSnbt();

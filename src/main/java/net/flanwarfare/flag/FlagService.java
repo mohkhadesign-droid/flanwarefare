@@ -71,6 +71,7 @@ public final class FlagService {
     private final Map<String, Map<Long, Role>> roleIndex = new HashMap<>();
     private final Map<String, Map<Long, UUID>> flagIndex = new HashMap<>();
     private final Map<UUID, Visual> visuals = new HashMap<>();
+    private final java.util.Set<UUID> conversionChecked = new java.util.HashSet<>();
 
     public FlagService(WarCore core) {
         this.core = core;
@@ -141,12 +142,21 @@ public final class FlagService {
     /** The structure a new or moved flag at the player's feet would get, per configuration. */
     private static FlagStructure plannedFor(ServerPlayerEntity player) {
         BlockPos base = player.getPosition();
+        if (useModel()) {
+            return FlagStructure.planned(base, FlagStructure.MODEL_HEIGHT, player.getHorizontalFacing(), FlagStructure.MODEL_BLOCK);
+        }
         if (!WarConfig.POLE_ENABLED.get()) {
             return FlagStructure.planned(base, 0, Direction.NORTH, null);
         }
         Block pole = FlagStructure.resolvePoleBlock(WarConfig.POLE_BLOCK.get());
         return FlagStructure.planned(base, WarConfig.POLE_HEIGHT.get(), player.getHorizontalFacing(),
                 pole.getRegistryName().toString());
+    }
+
+    /** True if new flags use the Flan Warfare Flags model (style AUTO with the mod, or MODEL). */
+    public static boolean useModel() {
+        String style = WarConfig.POLE_STYLE.get();
+        return !"BLOCKS".equalsIgnoreCase(style) && FlagStructure.modelAvailable();
     }
 
     private static void applyStructure(ClaimRecord record, FlagStructure s, int rotation) {
@@ -445,9 +455,8 @@ public final class FlagService {
     /** Builds the whole structure (pole, support if missing, banner at the current level). */
     private void build(ServerWorld world, ClaimRecord record) {
         FlagStructure s = FlagStructure.of(record);
-        BlockState pole = s.poleBlock().getDefaultState();
         for (BlockPos p : s.poleBlocks()) {
-            world.setBlockState(p, pole, 3);
+            world.setBlockState(p, s.poleStateAt(p), 3);
         }
         applyCurrent(world, record);
     }
@@ -466,6 +475,12 @@ public final class FlagService {
         FlagStructure s = FlagStructure.of(record);
         Visual visual = expected(record);
         ItemStack design = BannerDesigns.fromSnbt(visual.design);
+        if (s.isModel()) {
+            writeModel(world, s, design, s.raiseAt(visual.level));
+            record.designPending = false;
+            core.data().markDirty();
+            return;
+        }
         BlockPos target = s.bannerAt(visual.level);
         for (BlockPos slot : s.bannerSlots()) {
             if (!slot.equals(target) && FlagStructure.isBanner(world.getBlockState(slot))) {
@@ -488,6 +503,36 @@ public final class FlagService {
         removeDrops(world, s);
         record.designPending = false;
         core.data().markDirty();
+    }
+
+    /**
+     * Model flags: the design (base colour + vanilla pattern list) and the raise height go into
+     * the base tile entity of the Flan Warfare Flags block, through plain NBT, so this mod has
+     * no compile-time dependency on it. Clients get the change through the tile entity's update
+     * packet. Unchanged data sends nothing.
+     */
+    private static void writeModel(ServerWorld world, FlagStructure s, ItemStack design, float raise) {
+        net.minecraft.tileentity.TileEntity te = world.getTileEntity(s.base);
+        if (te == null) {
+            return; // restore() rebuilds the base block
+        }
+        net.minecraft.nbt.CompoundNBT data = te.write(new net.minecraft.nbt.CompoundNBT());
+        net.minecraft.nbt.CompoundNBT before = data.copy();
+        data.putInt("Base", BannerDesigns.color(design).getId());
+        net.minecraft.nbt.CompoundNBT source = design.getChildTag("BlockEntityTag");
+        if (source != null && source.contains("Patterns", 9)) {
+            data.put("Patterns", source.getList("Patterns", 10).copy());
+        } else {
+            data.put("Patterns", new net.minecraft.nbt.ListNBT());
+        }
+        data.putFloat("Raise", raise);
+        if (data.equals(before)) {
+            return;
+        }
+        BlockState state = world.getBlockState(s.base);
+        te.read(state, data);
+        te.markDirty();
+        world.notifyBlockUpdate(s.base, state, state, 3);
     }
 
     /** Shows the record's stored design, fully raised (ends any animation override). */
@@ -583,6 +628,7 @@ public final class FlagService {
             if (world == null || !world.isBlockLoaded(record.flagPos())) {
                 continue;
             }
+            convertIfNeeded(world, record);
             if (!intact(world, record)) {
                 restore(world, record, false);
             } else if (record.designPending) {
@@ -592,6 +638,46 @@ public final class FlagService {
         removeLoadedOrphans();
     }
 
+    /**
+     * Converts an existing flag between the vanilla-block form and the Flan Warfare Flags model
+     * when the configured style differs (for example right after the mod was installed, or if
+     * it was removed). Done once per flag per server run, never during a capture animation,
+     * and only if the new column is free (air, plants, or blocks of the old flag): nothing else
+     * is ever replaced. The old structure is removed through the normal relocation path.
+     */
+    private void convertIfNeeded(ServerWorld world, ClaimRecord record) {
+        FlagStructure s = FlagStructure.of(record);
+        boolean wantModel = useModel();
+        if (s.isModel() == wantModel || (!wantModel && !s.isModel())) {
+            return;
+        }
+        if (visuals.containsKey(record.claimId) || !conversionChecked.add(record.claimId)) {
+            return;
+        }
+        FlagStructure to;
+        if (wantModel) {
+            to = FlagStructure.planned(s.base, FlagStructure.MODEL_HEIGHT, s.isPole() ? s.side : Direction.NORTH,
+                    FlagStructure.MODEL_BLOCK);
+        } else if (WarConfig.POLE_ENABLED.get()) {
+            Block pole = FlagStructure.resolvePoleBlock(WarConfig.POLE_BLOCK.get());
+            to = FlagStructure.planned(s.base, WarConfig.POLE_HEIGHT.get(), s.side, pole.getRegistryName().toString());
+        } else {
+            to = FlagStructure.planned(s.base, 0, Direction.NORTH, null);
+        }
+        for (BlockPos p : to.allBlocks()) {
+            BlockState here = world.getBlockState(p);
+            boolean free = replaceable(world, p, here) || s.isPoleBlock(here) || FlagStructure.isBanner(here);
+            if (!free) {
+                core.audit("Flag of claim {} kept its old form: {} is occupied by {} (convert later with /flag move or "
+                        + "/war admin flag relocate)", record.claimId, p, here.getBlock().getRegistryName());
+                return;
+            }
+        }
+        relocate(world, record, to, record.flagRotation);
+        core.audit("Flag of claim {} converted to the {} form at {}", record.claimId,
+                wantModel ? "banner-and-pole model" : "vanilla block", s.base);
+    }
+
     /** True if every pole block is in place and the banner is at its expected slot. */
     public boolean intact(ServerWorld world, ClaimRecord record) {
         FlagStructure s = FlagStructure.of(record);
@@ -599,6 +685,9 @@ public final class FlagService {
             if (!s.isPoleBlock(world.getBlockState(p))) {
                 return false;
             }
+        }
+        if (s.isModel()) {
+            return world.getTileEntity(s.base) != null;
         }
         BlockPos target = s.bannerAt(expected(record).level);
         for (BlockPos slot : s.bannerSlots()) {
@@ -614,20 +703,24 @@ public final class FlagService {
     public String restore(ServerWorld world, ClaimRecord record, boolean byAdmin) {
         FlagStructure s = FlagStructure.of(record);
         String failure = null;
-        BlockState pole = s.poleBlock().getDefaultState();
         for (BlockPos p : s.poleBlocks()) {
             BlockState here = world.getBlockState(p);
-            if (s.isPoleBlock(here)) {
+            if (s.isPoleBlock(here) && (!s.isModel() || here.equals(s.poleStateAt(p)))) {
                 continue;
             }
-            if (replaceable(world, p, here)) {
-                world.setBlockState(p, pole, 3);
+            if (replaceable(world, p, here) || s.isPoleBlock(here)) {
+                world.setBlockState(p, s.poleStateAt(p), 3);
             } else {
                 failure = "flagpole position " + p + " is occupied by " + here.getBlock().getRegistryName();
                 break;
             }
         }
-        if (failure == null) {
+        if (failure == null && s.isModel()) {
+            if (replaceable(world, s.support(), world.getBlockState(s.support()))) {
+                world.setBlockState(s.support(), supportBlock().getDefaultState(), 3);
+            }
+            applyCurrent(world, record);
+        } else if (failure == null) {
             Visual visual = expected(record);
             BlockPos target = s.bannerAt(visual.level);
             BlockState here = world.getBlockState(target);

@@ -672,3 +672,76 @@ the profile cache work.
   messages, for example).
 - **Untested in game.** The display mechanics follow vanilla 1.16.5 behaviour, but no in-game
   test has run yet (see `docs/TESTING.md`, F1–F26).
+
+## 22. Flag model (Flan Warfare Flags companion mod)
+
+**Before:** flags were vanilla blocks placed by the server: pole blocks B..B+height (dark oak
+fence by default) and one wall banner beside the pole. Its level is the stepped capture
+animation, and its design comes from `ClaimRecord.designSnbt` (a banner item SNBT: colour plus
+`BlockEntityTag.Patterns`). There was no client code: a server-only mod can't add models.
+
+**New companion mod** (`flags-mod/`, modid `flanwarfareflags`, installed on server and clients):
+
+- **Block `flanwarfareflags:flag`**, with `facing` (horizontal) and `part` (0..5):
+  - Render type INVISIBLE, no drops, unbreakable in survival, no item.
+  - Shapes: `part` 0 is the pedestal (16×2×16 + 8×4×8) plus the 2×2 pole; `part` 1..5 are the
+    2×2 pole only. Collision equals these shapes.
+- **Tile entity on `part` 0**, holding `Base` (dye id), `Patterns` (vanilla banner pattern list)
+  and `Raise` (0..1). It syncs through the standard update tag and packet.
+  `getRenderBoundingBox` covers about 3×9×3 blocks, and the renderer is a global renderer, so
+  the tall model isn't culled with its base chunk section.
+- **`FlagRenderer`** (client package, registered in `FMLClientSetupEvent` through
+  `DistExecutor`, so it is never loaded on a dedicated server) draws, in pixels for a south-facing
+  flag:
+
+| Part | Size (px) | Position (y, px) |
+|---|---|---|
+| Lower pedestal | 16 × 2 × 16 | 0 – 2 |
+| Upper pedestal | 8 × 4 × 8 | 2 – 6 |
+| Pole | 2 × 2 | 6 – 94 |
+| Banner (raised) | 16 × 32 × 0.8 | 58 – 90 (exposed shaft below: 52 px = 3.25 blocks = 1.6 × fabric) |
+| Crossbar | 20 × 2.5 × 3.6 (1.25 blocks) | 90 – 92.5 |
+| End caps | 3 × 3.5 × 4.5 | 89.5 – 93 |
+| Tabs | 4 × (1.5 × 2) | 88 – 90 |
+| Finial | 4 × 3 × 4 + 2 × 2 × 2 | 94 – 99 |
+| **Total** | **20 × 99 px** | **6.19 blocks tall** |
+
+  The parts use `textures/entity/flag_parts.png` (wood, dark wood, stone, gold), split into
+  16 px pieces so there's no texture stretching.
+
+  The fabric is the vanilla banner flag model (20 × 40 × 1) scaled 0.8 and drawn by vanilla's
+  banner pattern renderer (`BannerTileEntityRenderer.func_230180_a_`). That gives identical
+  designs and both faces. Its back is 0.3 px in front of the pole, so nothing z-fights.
+
+  Facing rotates the whole assembly about the block centre. The banner front points to the
+  flag's side, the direction the player faced on `/flag place`.
+
+- **Smooth `Raise`:** the client moves the drawn height towards `Raise` at 0.4 of the travel per
+  second, so the server's 24 capture steps look continuous.
+
+**Flan Warfare integration** (no compile-time dependency; the block is found through the
+registry, and data is written as NBT):
+
+- **`FlagStructure`:** a model flag has `poleBlock = flanwarfareflags:flag` and `height` 5. Its
+  column is B..B+5, `poleStateAt` sets `part` and `facing`, it has no banner slots, and it uses
+  24 animation levels.
+- **`FlagService`:**
+  - `build` and `restore` place the column states.
+  - `applyCurrent` writes `Base`, `Patterns` and `Raise` into the tile entity, and only when
+    they changed.
+  - `intact` also requires the tile entity.
+  - Protection, the index, orphans and relocation work unchanged through `poleBlocks()` /
+    `allBlocks()`.
+- **`convertIfNeeded`:** once per flag per run, never during an animation, and only if the new
+  column is free, flags are rebuilt in the configured form through the normal relocation path.
+- **`CaptureManager`:** uses `FlagStructure.animationLevels()`.
+
+**Verified:**
+
+- Both projects compile on GitHub Actions against Forge 1.16.5-36.2.39, including
+  reobfuscation, and Flan Warfare's logic tests pass.
+- A geometry check plotted the renderer's cuboids from the same numbers, front and back
+  (matplotlib, not Minecraft).
+
+**Not verified (needs a client):** the in-game look, lighting, rotation for all four facings,
+render bounds at the screen edge, and the animation. See `docs/TESTING.md`, M1–M14.

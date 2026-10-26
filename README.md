@@ -276,6 +276,39 @@ Names with spaces go in quotes in later commands, or use the short id shown by `
 The labels are vanilla features (scoreboard team prefixes and invisible marker entities riding
 the player), so players still install nothing.
 
+### Flag model (optional Flan Warfare Flags mod)
+
+With the companion mod **Flan Warfare Flags** (`flanwarfareflags-*.jar`) installed **on the
+server and on every player's client**, claim flags become a tall medieval banner:
+
+- a stepped stone pedestal;
+- a 6-block wooden pole;
+- a dark crossbar with end caps and cloth tabs;
+- the claim's banner, 1 × 2 blocks, hanging high up;
+- a gold finial on top.
+
+It replaces the fence pole and wall banner. How it behaves:
+
+- **Same designs.** The banner is drawn with Minecraft's own banner renderer, so every loom
+  design, `/flag design set` design and the capture-animation design shows exactly as before,
+  on both sides.
+- **Smooth capture animation.** The banner slides down the pole as the capture progresses,
+  switches to the attacker's design at the bottom, and rises again.
+- **Collision is only the pedestal and the thin pole.** The banner and crossbar never block
+  movement.
+- **Existing flags convert automatically** when their chunk loads, if the 6-block column is
+  free. A flag whose column is blocked keeps its old form; this is logged, and `/flag move` or
+  `/war admin flag relocate` converts it.
+- **Easy to switch off.** `flagpole.style = "BLOCKS"` keeps the vanilla fence pole even with
+  the mod installed. If the mod is removed later, flags go back to fence poles.
+
+**Players without the mod can't join** while it's on the server. Forge requires it, because
+it adds a block. Flan Warfare itself still needs no client install.
+
+To get the hourglass design from the reference picture, give yourself this banner, then run
+`/flag design set` and `/flag design apply`:
+`/give @s black_banner{BlockEntityTag:{Patterns:[{Pattern:"tt",Color:4},{Pattern:"bt",Color:4},{Pattern:"mc",Color:15},{Pattern:"bo",Color:14}]}}`
+
 ### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
@@ -407,6 +440,7 @@ values are:
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
 | `capture.radius_blocks` | `3.0` | **The** capture radius: detection, contesting, aura and distance readout |
 | `capture.vertical_tolerance_blocks` | `3.0` | How far above/below the pole base still counts |
+| `flagpole.style` | `AUTO` | `AUTO`/`MODEL`: use the Flan Warfare Flags model when that mod is installed (and convert existing flags). `BLOCKS`: always fence pole + wall banner |
 | `flagpole.enabled` / `height_blocks` / `pole_block` | `true` / `4` / `minecraft:dark_oak_fence` | New and moved flags only |
 | `flagpole.animated_capture` / `animation_midpoint_percent` / `reverse_animation_on_decay` | `true` / `50` / `true` | |
 | `capture.duration_seconds` / `decay_seconds` | `90` / `60` | Uncontested capture time / full-bar decay |
@@ -471,7 +505,7 @@ Fixed rules (deliberately not configurable, for safety):
   add-on notices within 5 seconds and rebuilds it, and deletes fresh banner drops next to it. If
   it can't rebuild the flag 3 times in a row, the claim goes to `RECOVERY_REQUIRED`. The claim
   stays raidable and capturable, so destroying a flag never makes a claim immune.
-- **Flag animation is stepped, not smooth.** 1.16.5 has no display entities, and banners only
+- **Flag animation is stepped, not smooth** (vanilla-block flags only; the Flan Warfare Flags model animates smoothly). 1.16.5 has no display entities, and banners only
   sit at whole-block positions. A smooth version would need either armour-stand tricks (fragile,
   and their positioning can't be checked without a client) or a client mod. Taller poles
   (`height_blocks`) give more steps.

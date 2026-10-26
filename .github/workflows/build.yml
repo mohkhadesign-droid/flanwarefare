@@ -20,6 +20,7 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
+          ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
       - name: Report compile errors as annotations
         if: failure()
@@ -36,5 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: flanwarfare-jar
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            flags-mod/build/libs/*.jar
           if-no-files-found: error
