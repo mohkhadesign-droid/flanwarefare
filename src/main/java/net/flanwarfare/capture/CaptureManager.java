@@ -245,7 +245,8 @@ public final class CaptureManager {
             close(claimId, End.FAILED, claim, record);
             return;
         }
-        session.updateBar(title(claim, session, status, progressAllowed), viewers(record));
+        session.hud.noteAttackers(presence.attackerSides);
+        session.hud.update(claim, record, status, viewers(record), core.ticks());
     }
 
     /**
@@ -276,6 +277,7 @@ public final class CaptureManager {
     private CaptureSession open(ClaimRecord record, long windowId) {
         CaptureSession session = new CaptureSession(record.claimId, record.dimension, windowId,
                 WarConfig.CAPTURE_SECONDS.get() * 20L, WarConfig.DECAY_SECONDS.get() * 20L);
+        session.hud = new CaptureHud(core, session);
         sessions.put(record.claimId, session);
         return session;
     }
