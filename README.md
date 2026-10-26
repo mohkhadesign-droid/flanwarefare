@@ -11,7 +11,7 @@ war history, and custom kingdom ranks shown in chat and on nametags.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 174
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 190
 > automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
@@ -135,6 +135,33 @@ heights without a client mod, so a 4-block pole gives 4 positions down and 4 bac
 - Two rival attacking sides in the zone also pause it.
 - If the attackers leave, progress drains over 60 seconds. When the raid ends, unfinished
   captures drain to zero even if attackers stay, and the next raid always starts fresh.
+
+**The capture bar shows each player their own side of the raid.** Everyone sees the same
+percentage, which is always the attacker's progress towards taking the claim. The colour and
+wording depend on who is looking:
+
+| Raid state | Raiders see | Owner, party and invited members see |
+|---|---|---|
+| Progress rising | green **CAPTURING »** | red **LOSING CLAIM »** |
+| Contested (paused) | gold **CONTESTED ‖** | gold **CONTESTED ‖** |
+| Progress falling | red **LOSING PROGRESS «** | green **DEFENDING «** |
+
+- **Defenders** are the claim owner, the owner's FTB party, and every player invited to the
+  claim or one of its subclaims in Flan.
+- **Raiders** are players of a side that has captured at this flag during this raid.
+- **Anyone else nearby** sees neutral wording (CAPTURE IN PROGRESS / CAPTURE FADING) in white.
+
+With the **Flan Warfare Flags** mod installed, this is a panel at the top of the screen:
+
+- the attacking kingdom's banner and name on the left;
+- the defending kingdom's banner and name on the right;
+- the status in the middle, with the bar, percentage and a short explanation below it;
+- a striped gold bar while contested;
+- a faded trail showing the lost part for a moment when progress drops.
+
+Kingdom names come from FTB Teams parties; a player without a party is shown by name. The
+banners are each side's own flag design. Without the flags mod, the same information appears
+in a vanilla boss bar coloured per player.
 
 ### Live raid alerts
 

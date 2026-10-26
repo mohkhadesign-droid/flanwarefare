@@ -745,3 +745,68 @@ registry, and data is written as NBT):
 
 **Not verified (needs a client):** the in-game look, lighting, rotation for all four facings,
 render bounds at the screen edge, and the animation. See `docs/TESTING.md`, M1–M14.
+
+## 23. Viewer-specific capture HUD
+
+**Before:** one boss bar per capture session, the same for everyone in range: red while
+capturing, yellow while contested, white while decaying. The title was the claim label, state,
+percentage and capturer.
+
+**Now:** `CaptureHud` (one per session, created in `CaptureManager.open`, closed with the
+session) resolves each viewer's perspective at every capture evaluation:
+
+- **DEFENDER:** the current Flan owner, `SideResolver.sameTeam(viewer, owner)`, or
+  `FlanBridge.isMemberAnywhere(claim, viewer)`. Invited members count with any permission
+  group, also members of subclaims.
+- **ATTACKER:** the viewer's `SideResolver.sideOf` is one of the attacking sides seen by the
+  capture model during this session (`Presence.attackerSides`, recorded through
+  `noteAttackers`).
+- **NEUTRAL:** everyone else within the existing boss-bar distance.
+
+`HudView` (pure, tested) maps the perspective and `CaptureModel.Status` to the presentation:
+
+- **Trend:** CAPTURING is increasing, CONTESTED is contested, DECAYING or IDLE is decreasing.
+  It is taken from the authoritative model state, never from comparing percentages.
+- **Tone, status, subtitle and arrow:** as in the README table. Arrows follow the shared
+  progress, not the viewer.
+- **Fill:** `round(fraction × width)`, left-anchored, identical for every viewer.
+
+Names and banners:
+
+- **Names:** `SideResolver.kingdomOf(player).name` (the FTB Teams party name), falling back to
+  the player's name.
+  - The attacker is the session's designated capturer, or the last one if nobody is designated
+    right now.
+  - The defender is the claim owner.
+- **Banners:** the defender's is `ClaimRecord.designSnbt`, the claim's flag design. The
+  attacker's is the designated capturer's saved design (`FlagService.designFor`). Both are sent
+  as `Base` and `Patterns`, so the state colour never tints a banner.
+
+**Delivery.** With `flanwarfareflags` loaded on the server (Forge then requires it on every
+client), each viewer gets a vanilla `SCustomPayloadPlayPacket` on channel
+`flanwarfareflags:hud`:
+
+- **update:** type 0, claim UUID, perspective, trend, fraction (float), attacker name, defender
+  name, attacker banner NBT, defender banner NBT;
+- **remove:** type 1, claim UUID;
+- **when updates are sent:** only when something visible changes (0.1 % steps), plus a
+  keep-alive every 2 s;
+- **removal:** a remove is sent when the viewer leaves range or the session ends (completed,
+  failed, cancelled or server stop). The client also drops a panel that hasn't been updated for
+  5 s.
+
+The client (`CaptureHudClient`) draws one compact panel near the top centre. It prefers a
+capture in which the viewer is attacker or defender, otherwise the most recently updated one:
+
+- **Width:** at most 280 GUI px, and at most the screen width minus 8.
+- **Banners:** real banner items in the end frames.
+- **Long names:** trimmed with "..." so they never reach the status.
+- **Contested:** the bar is striped.
+- **Trail:** a fading trail (red for raiders, green for defenders) covers the lost range for
+  1.5 s whenever the fraction drops. It is never a second meter.
+
+Without the flags mod there are three vanilla boss bars per session, one per perspective
+(GREEN/RED/YELLOW/WHITE), and each viewer is in exactly one. The title is "ATTACKER   STATUS
+» 62%   DEFENDER".
+
+Capture rules, speed, contest and decay are unchanged.

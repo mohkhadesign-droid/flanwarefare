@@ -33,6 +33,14 @@ public final class FlagsMod {
     public static final RegistryObject<TileEntityType<FlagTileEntity>> FLAG_TILE = TILES.register("flag",
             () -> TileEntityType.Builder.create(FlagTileEntity::new, FLAG.get()).build(null));
 
+    /**
+     * Capture HUD data from Flan Warfare (server). Registered on both sides so the Forge
+     * handshake matches; only clients listen. The server sends plain custom-payload packets.
+     */
+    public static final net.minecraftforge.fml.network.event.EventNetworkChannel HUD_CHANNEL =
+            net.minecraftforge.fml.network.NetworkRegistry.newEventChannel(
+                    new net.minecraft.util.ResourceLocation(MOD_ID, "hud"), () -> "1", v -> true, v -> true);
+
     public FlagsMod() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         BLOCKS.register(bus);

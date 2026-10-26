@@ -47,6 +47,7 @@ public final class LogicSelfTest {
         permissionDiff();
         rankColors();
         rankRules();
+        hudPerspectives();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -599,5 +600,31 @@ public final class LogicSelfTest {
 
     private static void eqd(double expected, double actual, String what) {
         check(Math.abs(expected - actual) < 1e-6, what + " (expected " + expected + ", got " + actual + ")");
+    }
+
+    private static void hudPerspectives() {
+        HudView.Trend up = HudView.trendOf(CaptureModel.Status.CAPTURING);
+        HudView.Trend paused = HudView.trendOf(CaptureModel.Status.CONTESTED);
+        HudView.Trend down = HudView.trendOf(CaptureModel.Status.DECAYING);
+        HudView.Perspective a = HudView.Perspective.ATTACKER;
+        HudView.Perspective d = HudView.Perspective.DEFENDER;
+        // The six combinations of the reference sheet.
+        check(HudView.tone(a, up) == HudView.Tone.GOOD && "CAPTURING".equals(HudView.status(a, up)), "1 attacker increasing: green CAPTURING");
+        check(HudView.tone(d, up) == HudView.Tone.BAD && "LOSING CLAIM".equals(HudView.status(d, up)), "2 defender increasing: red LOSING CLAIM");
+        check(HudView.tone(a, paused) == HudView.Tone.PAUSED && "CONTESTED".equals(HudView.status(a, paused)), "3 attacker contested: gold");
+        check(HudView.tone(d, paused) == HudView.Tone.PAUSED && "CONTESTED".equals(HudView.status(d, paused)), "4 defender contested: gold");
+        check(HudView.tone(a, down) == HudView.Tone.BAD && "LOSING PROGRESS".equals(HudView.status(a, down)), "5 attacker decreasing: red LOSING PROGRESS");
+        check(HudView.tone(d, down) == HudView.Tone.GOOD && "DEFENDING".equals(HudView.status(d, down)), "6 defender decreasing: green DEFENDING");
+        eq("Your capture progress is increasing", HudView.subtitle(a, up), "attacker subtitle");
+        eq("Enemy capture progress is decreasing", HudView.subtitle(d, down), "defender subtitle");
+        eq("Capture progress paused", HudView.subtitle(d, paused), "paused subtitle");
+        check(HudView.arrow(up) == HudView.Arrow.RIGHT && HudView.arrow(down) == HudView.Arrow.LEFT
+                && HudView.arrow(paused) == HudView.Arrow.PAUSE, "arrows follow the shared progress");
+        check(HudView.tone(HudView.Perspective.NEUTRAL, up) == HudView.Tone.NEUTRAL, "neutral viewers get no side colour");
+        eq(HudView.fill(0.62, 120), HudView.fill(0.62, 120), "same fill for every viewer");
+        eq(74, HudView.fill(0.62, 120), "62% of 120 px");
+        eq(0, HudView.fill(-1, 120), "fill clamped low");
+        eq(120, HudView.fill(2, 120), "fill clamped high");
+        check(HudView.trendOf(CaptureModel.Status.IDLE) == HudView.Trend.DECREASING, "idle with progress decays");
     }
 }

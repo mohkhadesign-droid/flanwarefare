@@ -13,5 +13,8 @@ public final class ClientSetup {
     public static void init(IEventBus bus) {
         bus.addListener((FMLClientSetupEvent event) ->
                 ClientRegistry.bindTileEntityRenderer(FlagsMod.FLAG_TILE.get(), FlagRenderer::new));
+        CaptureHudClient hud = new CaptureHudClient();
+        FlagsMod.HUD_CHANNEL.addListener(hud::onPayload);
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(hud);
     }
 }

@@ -52,12 +52,13 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 
 | Membership net change: added, removed, group change, group edit, no-op silent, offline merge rules | `membershipChanges` | as specified | **PASS** |
 
+| Capture HUD perspective: the six raider/defender combinations, contested gold, neutral, arrows, subtitles, exact clamped fill | `hudPerspectives` | as specified | **PASS** |
 | Effective-permission diff wording (CANSTAY gained/lost, lists), no diff -> no lines; group switch with identical permissions is silent | `permissionDiff`, `membershipChanges` | as specified | **PASS** |
 
 | Rank colours: names, hex, hex disabled, invalid input; 2- and 3-stop gradients; solid, rainbow and wave frames differ by phase; naming of colours | `rankColors` | as specified | **PASS** |
 | Rank names (spaces, length, formatting codes); decorations (symbols, section sign, control characters, allow-list); position priority and disabled fallbacks; chat format tokens and validation | `rankRules` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 174 checks passed` (locally, and on every GitHub
+Result of the last run: `LogicSelfTest: all 190 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -277,6 +278,25 @@ Install `flanwarfareflags-*.jar` on the server and the client.
 | M12 | Client without the mod joins | Refused by Forge (mod required). |
 | M13 | Dedicated server log at startup | No client-class errors (renderer only loaded on clients). |
 | M14 | 10+ flags in view | No noticeable FPS drop. |
+
+## Viewer-specific capture HUD scenarios (all NOT RUN)
+
+Accounts: A (raider, party Northwatch), O (claim owner, party Riverkeep), M (invited Flan member of O's claim, not in the party), V (unrelated visitor).
+
+| # | Scenario | Expected |
+|---|---|---|
+| H1 | A alone in the ring during a raid | A: green CAPTURING » ; O and M: red LOSING CLAIM » ; same % and fill. |
+| H2 | O steps into the ring | Everyone: gold striped CONTESTED with a pause symbol; % held. |
+| H3 | A leaves, progress decays | A: red LOSING PROGRESS « ; O and M: green DEFENDING « ; same %. Faded trail shows the lost part for about 1.5 s. |
+| H4 | V watches from 10 blocks away | Neutral wording, white bar, no side colour. |
+| H5 | A's party member stands near but outside the ring | Raider view. |
+| H6 | O removes M from the claim in Flan during the capture | M switches to neutral at the next update. |
+| H7 | Both panels | Left: Northwatch's banner and name; right: Riverkeep's; never swapped; banners keep their own colours in every state. |
+| H8 | Party with a very long name | Name trimmed with "...", never overlapping the status or banner. |
+| H9 | GUI scale 1, 2, 3, Auto; small window | Panel readable and within the screen. |
+| H10 | Capture completes / fails / admin cancels / viewer walks away | Panel disappears for everyone involved. |
+| H11 | Server without the flags mod | Per-perspective boss bars with the same colours and wording. |
+| H12 | Contested for a long time with no % change | Stays CONTESTED (taken from the capture state, not from % changes). |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
