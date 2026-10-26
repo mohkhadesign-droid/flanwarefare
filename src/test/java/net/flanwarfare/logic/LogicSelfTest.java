@@ -45,6 +45,8 @@ public final class LogicSelfTest {
         flagAnimation();
         membershipChanges();
         permissionDiff();
+        rankColors();
+        rankRules();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -509,6 +511,69 @@ public final class LogicSelfTest {
         java.util.List<String> lost = MembershipChange.describeDiff(after, before);
         check(lost.contains("You no longer have permission to enter."), "CANSTAY lost phrased as entering");
         check(MembershipChange.describeDiff(before, before).isEmpty(), "no difference, no lines");
+    }
+
+    private static void rankColors() {
+        eq(0xFFAA00, RankColors.parse("gold", true), "named colour");
+        eq(0xFFAA00, RankColors.parse("#ffaa00", true), "hex colour");
+        boolean threw = false;
+        try {
+            RankColors.parse("#FFAA00", false);
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "hex refused when disabled");
+        threw = false;
+        try {
+            RankColors.parse("#GG0000", true);
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "invalid hex refused");
+        int[] g = RankColors.gradient(Arrays.asList(0xFFD700, 0xFF4500), 5);
+        eq(0xFFD700, g[0], "gradient starts at first colour");
+        eq(0xFF4500, g[4], "gradient ends at last colour");
+        int[] g3 = RankColors.gradient(Arrays.asList(0x00FFFF, 0x0066FF, 0x9900FF), 9);
+        eq(0x0066FF, g3[4], "three-colour gradient passes the middle stop at the centre");
+        eq(0x9900FF, g3[8], "three-colour gradient ends at the last stop");
+        int[] solid = RankColors.colors(Arrays.asList(0x5555FF), RankColors.Effect.NONE, 4, 0.3);
+        check(solid[0] == 0x5555FF && solid[3] == 0x5555FF, "solid colour on every character");
+        int[] r1 = RankColors.colors(Arrays.asList(0xFFFFFF), RankColors.Effect.RAINBOW, 6, 0.0);
+        int[] r2 = RankColors.colors(Arrays.asList(0xFFFFFF), RankColors.Effect.RAINBOW, 6, 0.25);
+        check(r1[0] != r2[0], "rainbow frames differ over time");
+        int[] w1 = RankColors.colors(Arrays.asList(0xFF0000, 0x0000FF), RankColors.Effect.WAVE, 8, 0.0);
+        int[] w2 = RankColors.colors(Arrays.asList(0xFF0000, 0x0000FF), RankColors.Effect.WAVE, 8, 0.5);
+        check(w1[0] != w2[0], "wave moves");
+        check(RankColors.animated(RankColors.Effect.PULSE) && !RankColors.animated(RankColors.Effect.BOLD),
+                "only rainbow/pulse/wave are animated");
+        eq("gold", RankColors.format(0xFFAA00), "named colour shown by name");
+        eq("#123456", RankColors.format(0x123456), "other colours shown as hex");
+    }
+
+    private static void rankRules() {
+        check(RankRules.checkName("Royal Guard", 24) == null, "spaces allowed");
+        check(RankRules.checkName("High Commander of the Northern Realm", 24) != null, "length limit");
+        check(RankRules.checkName("King\u00a7c", 24) != null, "formatting code refused in names");
+        check(RankRules.checkDecoration("\u2694 ", 6, "") == null, "sword symbol allowed");
+        check(RankRules.checkDecoration("\u00a7k", 6, "") != null, "section sign refused");
+        check(RankRules.checkDecoration("\n", 6, "") != null, "control characters refused");
+        check(RankRules.checkDecoration("\u2605", 6, "\u2694") != null, "symbol outside allow-list refused");
+        check(RankRules.checkDecoration("[", 6, "[]") == null, "allow-listed symbol accepted");
+        eq(RankRules.Position.ABOVE, RankRules.resolve(RankRules.Position.ABOVE, RankRules.Position.BELOW,
+                RankRules.Position.LEFT, true, true, true), "player override wins");
+        eq(RankRules.Position.BELOW, RankRules.resolve(null, RankRules.Position.BELOW,
+                RankRules.Position.LEFT, true, true, true), "then the rank default");
+        eq(RankRules.Position.LEFT, RankRules.resolve(null, null, RankRules.Position.LEFT, true, true, true),
+                "then the global default");
+        eq(RankRules.Position.BELOW, RankRules.resolve(RankRules.Position.ABOVE, RankRules.Position.BELOW,
+                RankRules.Position.LEFT, false, true, true), "overrides ignored when disabled");
+        eq(RankRules.Position.LEFT, RankRules.resolve(RankRules.Position.ABOVE, null,
+                RankRules.Position.LEFT, true, false, true), "disabled ABOVE falls back to LEFT");
+        java.util.List<RankRules.Token> tokens = RankRules.tokenize("[{rank}] {player}: {message}");
+        eq(6, tokens.size(), "format tokens: [, rank, ], player, :, message");
+        check(tokens.get(1).placeholder && tokens.get(1).text.equals("rank"), "rank placeholder found");
+        check(RankRules.validFormat("{player} [{rank}]: {message}"), "reordered format valid");
+        check(!RankRules.validFormat("[{rank}] {player}"), "format without message invalid");
     }
 
     private static Set<UUID> set(UUID... ids) {

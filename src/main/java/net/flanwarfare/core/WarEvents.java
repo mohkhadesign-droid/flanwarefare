@@ -3,17 +3,24 @@ package net.flanwarfare.core;
 import io.github.flemmli97.flan.api.forge.PermissionCheckEvent;
 import net.flanwarfare.command.FlagCommand;
 import net.flanwarfare.command.StatsCommand;
+import net.flanwarfare.command.RankCommand;
 import net.flanwarfare.command.WarCommand;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.data.ClaimRecord;
 import net.flanwarfare.protection.ExplosionRules;
 import net.flanwarfare.protection.FlagProtection;
 import net.flanwarfare.protection.RaidPermissions;
+import net.flanwarfare.ranks.RankDisplay;
+import net.flanwarfare.ranks.RankRenderer;
+import net.flanwarfare.ranks.RankService;
 import net.flanwarfare.util.Msg;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.world.World;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.ServerChatEvent;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.world.BlockEvent;
@@ -60,6 +67,7 @@ public final class WarEvents {
         FlagCommand.register(event.getDispatcher());
         WarCommand.register(event.getDispatcher());
         StatsCommand.register(event.getDispatcher());
+        RankCommand.register(event.getDispatcher());
     }
 
     @SubscribeEvent
@@ -144,6 +152,66 @@ public final class WarEvents {
         if (!pending.isEmpty()) {
             Msg.send(player, Msg.warn("You have " + pending.size() + " inactive claim(s) without a flag. "
                     + "They protect nothing until you stand inside and run /flag place."));
+        }
+    }
+
+    @SubscribeEvent
+    public void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        WarCore core = WarCore.ready();
+        if (core != null && event.getPlayer() instanceof ServerPlayerEntity) {
+            core.rankDisplay().onLogout((ServerPlayerEntity) event.getPlayer());
+        }
+    }
+
+    @SubscribeEvent
+    public void onRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        WarCore core = WarCore.ready();
+        if (core != null && event.getPlayer() instanceof ServerPlayerEntity) {
+            core.rankDisplay().onPlayerChanged((ServerPlayerEntity) event.getPlayer());
+        }
+    }
+
+    @SubscribeEvent
+    public void onDimensionChange(PlayerEvent.PlayerChangedDimensionEvent event) {
+        WarCore core = WarCore.ready();
+        if (core != null && event.getPlayer() instanceof ServerPlayerEntity) {
+            core.rankDisplay().onPlayerChanged((ServerPlayerEntity) event.getPlayer());
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onDeath(LivingDeathEvent event) {
+        WarCore core = WarCore.ready();
+        if (core != null && !event.isCanceled() && event.getEntityLiving() instanceof ServerPlayerEntity) {
+            core.rankDisplay().onPlayerChanged((ServerPlayerEntity) event.getEntityLiving());
+        }
+    }
+
+    /**
+     * Rank label entities only exist while this server session tracks them. One loaded from a
+     * chunk or player file (left by a crash) is refused, also before the add-on is ready.
+     */
+    @SubscribeEvent
+    public void onEntityJoin(EntityJoinWorldEvent event) {
+        if (event.getWorld().isRemote() || !event.getEntity().getTags().contains(RankDisplay.ENTITY_TAG)) {
+            return;
+        }
+        WarCore core = WarCore.get();
+        if (core == null || core.rankDisplay().isStray(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onChat(ServerChatEvent event) {
+        WarCore core = WarCore.ready();
+        if (core == null || !WarConfig.RANK_CHAT_ENABLED.get() || event.getPlayer() == null) {
+            return;
+        }
+        RankService.Active active = core.ranks().active(event.getPlayer().getUniqueID());
+        if (active != null) {
+            event.setComponent(RankRenderer.chat(active.rank, core.rankDisplay().phase(),
+                    event.getUsername(), event.getMessage()));
         }
     }
 }

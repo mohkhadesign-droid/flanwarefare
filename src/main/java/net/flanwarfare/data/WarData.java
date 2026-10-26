@@ -45,6 +45,8 @@ public final class WarData {
         Season season;
         int seasonCounter;
         Map<UUID, List<MemberNotice>> memberNotices = new HashMap<>();
+        Map<UUID, RankRegistry> rankRegistries = new HashMap<>();
+        Map<UUID, UUID> mainClaims = new HashMap<>();
     }
 
     private static final int MAX_ALERTS_PER_PLAYER = 20;
@@ -96,6 +98,15 @@ public final class WarData {
             }
             if (loaded.memberNotices == null) {
                 loaded.memberNotices = new HashMap<>();
+            }
+            if (loaded.rankRegistries == null) {
+                loaded.rankRegistries = new HashMap<>();
+            }
+            if (loaded.mainClaims == null) {
+                loaded.mainClaims = new HashMap<>();
+            }
+            for (RankRegistry registry : loaded.rankRegistries.values()) {
+                registry.repair();
             }
             loaded.claims.values().removeIf(r -> r == null || r.claimId == null || r.dimension == null);
             data.state = loaded;
@@ -224,6 +235,16 @@ public final class WarData {
         }
         dirty = true;
         return list;
+    }
+
+    /** Rank registries by main-claim UUID. */
+    public Map<UUID, RankRegistry> rankRegistries() {
+        return state.rankRegistries;
+    }
+
+    /** Designated main claim per player (the claim whose rank registry they manage by default). */
+    public Map<UUID, UUID> mainClaims() {
+        return state.mainClaims;
     }
 
     /** Pending membership notices of an offline player (live list, may be modified). */

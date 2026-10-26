@@ -129,6 +129,32 @@ public final class WarConfig {
     public static final ForgeConfigSpec.IntValue POLE_MIDPOINT;
     public static final ForgeConfigSpec.BooleanValue POLE_REVERSE_ON_DECAY;
 
+    // kingdom_ranks
+    public static final ForgeConfigSpec.BooleanValue RANKS_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue RANKS_REQUIRE_MEMBERSHIP;
+    public static final ForgeConfigSpec.IntValue RANKS_MAX_PER_KINGDOM;
+    public static final ForgeConfigSpec.IntValue RANKS_MAX_NAME_LENGTH;
+    public static final ForgeConfigSpec.IntValue RANKS_MAX_DECORATION_LENGTH;
+    public static final ForgeConfigSpec.ConfigValue<String> RANKS_ALLOWED_SYMBOLS;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_HEX;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_GRADIENTS;
+    public static final ForgeConfigSpec.IntValue RANKS_MAX_GRADIENT_COLORS;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_BOLD;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_GLOW;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_RAINBOW;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_PULSE;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_WAVE;
+    public static final ForgeConfigSpec.BooleanValue RANKS_ALLOW_OBFUSCATED;
+    public static final ForgeConfigSpec.IntValue RANKS_ANIMATION_TICKS;
+    public static final ForgeConfigSpec.BooleanValue RANK_CHAT_ENABLED;
+    public static final ForgeConfigSpec.ConfigValue<String> RANK_CHAT_FORMAT;
+    public static final ForgeConfigSpec.BooleanValue RANK_TAGS_ENABLED;
+    public static final ForgeConfigSpec.EnumValue<net.flanwarfare.logic.RankRules.Position> RANK_DEFAULT_POSITION;
+    public static final ForgeConfigSpec.ConfigValue<String> RANK_SEPARATOR;
+    public static final ForgeConfigSpec.BooleanValue RANK_ALLOW_ABOVE;
+    public static final ForgeConfigSpec.BooleanValue RANK_ALLOW_BELOW;
+    public static final ForgeConfigSpec.BooleanValue RANK_ALLOW_OVERRIDES;
+
     // raid_notifications
     public static final ForgeConfigSpec.BooleanValue ALERTS_ENABLED;
     public static final ForgeConfigSpec.BooleanValue ALERT_OWNER;
@@ -372,6 +398,54 @@ public final class WarConfig {
         MEMBER_NOTICE_CHANGED = b.define("notify_on_permission_change", true);
         MEMBER_NOTICE_OFFLINE = b.comment("Deliver notices to offline players at their next login.")
                 .define("queue_offline_notifications", true);
+        b.pop();
+
+        b.comment("Kingdom ranks: cosmetic titles that owners of a kingdom's main claim create and give to members.",
+                "Ranks never grant Flan permissions, ownership or operator status.").push("kingdom_ranks");
+        RANKS_ENABLED = b.define("enabled", true);
+        RANKS_REQUIRE_MEMBERSHIP = b.comment("Only the owner and Flan members of the main claim (or its subclaims) can hold its ranks.",
+                        "Ranks of players who stop being members are suspended (hidden) until they are members again.")
+                .define("require_membership", true);
+        RANKS_MAX_PER_KINGDOM = b.defineInRange("max_ranks_per_kingdom", 20, 1, 100);
+        RANKS_MAX_NAME_LENGTH = b.defineInRange("max_rank_name_length", 24, 3, 48);
+        RANKS_MAX_DECORATION_LENGTH = b.comment("Maximum characters of a prefix or suffix decoration.")
+                .defineInRange("max_decoration_length", 4, 1, 12);
+        RANKS_ALLOWED_SYMBOLS = b.comment("If not empty, decorations may only use letters, digits, spaces and these symbols.",
+                        "Formatting codes and control characters are always refused.")
+                .define("allowed_decoration_symbols", "");
+        RANKS_ALLOW_HEX = b.define("allow_hex_colors", true);
+        RANKS_ALLOW_GRADIENTS = b.define("allow_gradients", true);
+        RANKS_MAX_GRADIENT_COLORS = b.defineInRange("max_gradient_colors", 5, 2, 8);
+        RANKS_ALLOW_BOLD = b.define("allow_bold", true);
+        RANKS_ALLOW_GLOW = b.define("allow_glow", true);
+        RANKS_ALLOW_RAINBOW = b.define("allow_rainbow", true);
+        RANKS_ALLOW_PULSE = b.define("allow_pulse", true);
+        RANKS_ALLOW_WAVE = b.define("allow_wave", true);
+        RANKS_ALLOW_OBFUSCATED = b.comment("Minecraft's scrambled-letter effect. Off by default: it makes the rank unreadable.")
+                .define("allow_obfuscated", false);
+        RANKS_ANIMATION_TICKS = b.comment("How often animated effects (rainbow, pulse, wave) refresh nametags and labels.",
+                        "Chat lines cannot animate after they are sent; they show one frame.")
+                .defineInRange("animation_update_interval_ticks", 20, 5, 200);
+        b.pop();
+
+        b.push("rank_chat");
+        RANK_CHAT_ENABLED = b.comment("Show ranks in chat. Players without a rank keep the normal chat format.",
+                        "If another mod already reformatted the message, it is left alone to avoid duplicated prefixes.")
+                .define("enabled", true);
+        RANK_CHAT_FORMAT = b.comment("Placeholders {rank}, {player}, {message}, each exactly once.")
+                .define("format", "[{rank}] {player}: {message}",
+                        o -> o instanceof String && net.flanwarfare.logic.RankRules.validFormat((String) o));
+        b.pop();
+
+        b.comment("Ranks on nametags. LEFT uses a vanilla scoreboard-team prefix (also shown in the tab list).",
+                "ABOVE/BELOW use an invisible marker armor stand carrying the text (experimental): BELOW rides the player",
+                "(smooth), ABOVE follows the player (can trail slightly when running).").push("rank_nametags");
+        RANK_TAGS_ENABLED = b.define("enabled", true);
+        RANK_DEFAULT_POSITION = b.defineEnum("default_position", net.flanwarfare.logic.RankRules.Position.LEFT);
+        RANK_SEPARATOR = b.comment("Between the rank and the name for LEFT placement.").define("separator", " | ");
+        RANK_ALLOW_ABOVE = b.define("allow_above_position", true);
+        RANK_ALLOW_BELOW = b.define("allow_below_position", true);
+        RANK_ALLOW_OVERRIDES = b.define("allow_player_overrides", true);
         b.pop();
 
         b.comment("Live alerts when a specific claim is attacked. These are separate from the raid-window announcements.",
