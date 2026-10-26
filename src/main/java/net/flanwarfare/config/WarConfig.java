@@ -124,6 +124,7 @@ public final class WarConfig {
     // flagpole
     public static final ForgeConfigSpec.BooleanValue POLE_ENABLED;
     public static final ForgeConfigSpec.IntValue POLE_HEIGHT;
+    public static final ForgeConfigSpec.ConfigValue<String> POLE_STYLE;
     public static final ForgeConfigSpec.ConfigValue<String> POLE_BLOCK;
     public static final ForgeConfigSpec.BooleanValue POLE_ANIMATED;
     public static final ForgeConfigSpec.IntValue POLE_MIDPOINT;
@@ -375,6 +376,12 @@ public final class WarConfig {
                 "Existing flags keep their shape until moved or restored by an admin. Changing height affects new/moved flags only.")
                 .push("flagpole");
         POLE_ENABLED = b.define("enabled", true);
+        POLE_STYLE = b.comment("AUTO: if the Flan Warfare Flags mod (flanwarfareflags) is installed, flags use its banner-and-pole",
+                        "model (pedestal, tall pole, crossbar, banner, gold finial) and existing flags are converted when their",
+                        "chunk loads (if the column above is free). BLOCKS: always the vanilla fence pole + wall banner.",
+                        "MODEL behaves like AUTO. Without the mod, flags always use BLOCKS.")
+                .define("style", "AUTO", o -> o instanceof String && ("AUTO".equalsIgnoreCase((String) o)
+                        || "MODEL".equalsIgnoreCase((String) o) || "BLOCKS".equalsIgnoreCase((String) o)));
         POLE_HEIGHT = b.comment("Banner height above the base; the pole is height+1 blocks tall (base included).",
                         "The banner can hang at this many positions, so taller poles give smoother animation.")
                 .defineInRange("height_blocks", 4, 2, 12);

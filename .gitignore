@@ -9,3 +9,5 @@ run/
 libs/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
+flags-mod/.gradle/
+flags-mod/build/

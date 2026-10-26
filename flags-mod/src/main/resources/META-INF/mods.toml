@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="flanwarfareflags"
+version="${file.jarVersion}"
+displayName="Flan Warfare Flags"
+authors="flanwarfare"
+description='''
+The claim flag model of Flan Warfare & Conquest: a stepped stone pedestal, a tall wooden pole,
+a crossbar with the claim's banner and a gold finial. Install on the server AND on every client.
+'''
+
+[[dependencies.flanwarfareflags]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.flanwarfareflags]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="BOTH"
