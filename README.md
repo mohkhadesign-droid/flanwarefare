@@ -2,8 +2,8 @@
 
 Server-side Forge 1.16.5 add-on for **Flan 1.16.5-1.7.2** that adds scheduled raid windows,
 mandatory claim flags, contested territory capture with a visible capture zone, live raid
-alerts, permanent conquest with limits and recapture immunity, and season leaderboards with a
-war history.
+alerts, permanent conquest with limits and recapture immunity, season leaderboards with a
+war history, and custom kingdom ranks shown in chat and on nametags.
 
 - Players do **not** install anything. The mod registers no blocks, items or network channels.
   Banners, particles, boss bars, titles and sounds are all vanilla.
@@ -11,7 +11,7 @@ war history.
   runs a second claim system; it decides permissions dynamically and uses Flan's own operations.
 - Built and verified against the exact Flan JAR on your server (see `docs/TECHNICAL.md`).
 
-> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 143
+> **Status:** builds on GitHub Actions against Forge 1.16.5 (compile, reobfuscation and 174
 > automated logic checks). The in-game behaviour has **not** been tested on a server yet.
 > Follow `docs/TESTING.md` on a copy of the server before using it on the live season.
 
@@ -235,6 +235,47 @@ about 3 seconds, and a change that undoes itself says nothing.
 Members of a claim that gets conquered are told their access ended. Offline players get their
 notices at the next login.
 
+### Kingdom ranks, chat tags and nametags
+
+Each kingdom owner can design ranks such as **Royal Guard**, **High Commander** or **Scout** and
+give them to their members. Ranks are purely cosmetic: they never grant Flan permissions,
+ownership or operator rights. Flan's groups stay the only source of access.
+
+1. Stand in your main claim and run `/war rank setmain`.
+2. `/war rank create Royal Guard` (names may contain spaces).
+3. Style it: `/war rank color "Royal Guard" gold`, `/war rank gradient "Royal Guard" #FFD700 #FF4500`,
+   `/war rank effect "Royal Guard" wave`, `/war rank prefix "Royal Guard" ⚔`.
+4. `/war rank assign Steve "Royal Guard"`. Steve must be a Flan member of the claim (or one of its
+   subclaims). Public access doesn't count.
+5. `/war rank preview "Royal Guard"` shows the tag, the nametag and a chat line.
+
+Names with spaces go in quotes in later commands, or use the short id shown by `/war rank list`.
+
+- **Colours:** the 16 Minecraft colour names or any `#RRGGBB`. Gradients use 2 to 5 colours.
+- **Effects:** `none`/`static`, `bold`, `glow` (brighter and bold), `rainbow`, `pulse`, `wave`,
+  and `obfuscated` (off by default because it's unreadable). Animated effects move on nametags;
+  a chat line shows a single frame because chat can't change after it's sent.
+- **Decorations:** a prefix and suffix of up to 4 characters, such as ⚔ ★ ♛ ✦. Formatting codes
+  and invisible characters are refused, and admins can restrict the allowed symbols.
+- **Where the tag appears:**
+  - In **chat**, as `[Royal Guard] Steve: hello`. The format is configurable.
+  - On the **nametag**:
+    - `LEFT` shows "Royal Guard | Steve" and also appears in the tab list. This is the default.
+    - `BELOW` shows the rank on its own line just under the name.
+    - `ABOVE` shows it on its own line above the name.
+
+    A rank has a default position. Each holder can change their own with
+    `/war rank playerposition <you> left|above|below|reset`.
+- **Membership is checked live.** If someone is removed from the claim in Flan, their rank is
+  kept but hidden ("suspended") until they're a member again. A player holds one rank at a time.
+  Only an admin can move a rank between kingdoms.
+- **Conquest:** the current Flan owner of a main claim manages its ranks. If the claim is
+  conquered, the conqueror takes over its rank list. They manage it while standing in it, and
+  the previous owner loses control. If the claim is deleted, its ranks go with it.
+
+The labels are vanilla features (scoreboard team prefixes and invisible marker entities riding
+the player), so players still install nothing.
+
 ### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
@@ -278,6 +319,16 @@ notices at the next login.
 | `/war log [page]` | Recent war history (conquests, defenses, losses, reversals). |
 | `/war log player <player>` / `claim` / `kingdom <kingdom>` `[page]` | History filtered by player, the claim you stand in, or kingdom. |
 | `/war seasons [<id> [log [page]]]` | Archived seasons: final rankings and their war log. |
+| `/war rank setmain` | Make the claim you stand in (yours) your kingdom's main claim for ranks. |
+| `/war rank list` / `members [rank]` / `info [player]` / `preview <rank>` | Show ranks, holders (suspended ones marked), one player's rank and display, or a preview. |
+| `/war rank create <name>` / `delete <rank>` / `rename <rank> <new name>` | Manage rank definitions (kingdom owner). |
+| `/war rank color <rank> <color>` | Single colour: a name such as `gold` or `#RRGGBB`. |
+| `/war rank gradient <rank> <c1> <c2> [...]` / `gradient <rank> clear` | Multi-colour gradient. |
+| `/war rank effect <rank> <effect>` | `none`, `static`, `bold`, `glow`, `rainbow`, `pulse`, `wave`, `obfuscated`. |
+| `/war rank position <rank> left\|above\|below\|default` | Default nametag placement for the rank. |
+| `/war rank prefix <rank> <text>` / `suffix <rank> <text>` / `decoration <rank> clear` | Decorations around the name. |
+| `/war rank assign <player> <rank>` / `remove <player>` | Give or take a rank (holder must be a Flan member of the kingdom). |
+| `/war rank playerposition <player> left\|above\|below\|reset` | Personal placement (yourself, or members of your kingdom). |
 
 **Flag placement rules:**
 
@@ -316,9 +367,16 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin season reset confirm` | Clear the current season's statistics after writing a backup archive. |
 | `/war admin stats check` | Read-only report: season, players, kingdoms, conquests, defenses, conquered claims, log entries, integrity warnings. Changes nothing. |
 | `/war admin stats check <player>` | Read-only player report: UUID, kingdom, conquests, defenses, losses, ordinary/conquered claims, slots, immunity, inconsistencies. |
+| `/war admin rank list` | Every kingdom with ranks: main claim UUID, owner, counts. |
+| `/war admin rank inspect <kingdom>` | Ranks, holders, suspensions and personal positions. |
+| `/war admin rank create <kingdom> <name>` / `reset <kingdom>` | Create a rank / remove all ranks and assignments of a kingdom. |
+| `/war admin rank assign <kingdom> <player> <rank>` / `remove <player>` | Assign across kingdoms (moves an existing rank). |
+| `/war admin rank position <player> left\|above\|below\|reset` | Set anyone's personal placement. |
 | `/war admin stats repair confirm` | Apply the safe fixes the check reports (duplicates, owner re-sync, deleted claims, invalid immunity). Audit-logged. |
 
-`<claim>` is the Flan claim UUID; press Tab to complete it. Operators who switch on Flan's own
+`<claim>` is the Flan claim UUID; press Tab to complete it. `<kingdom>` is a main-claim UUID or
+its Flan claim name (in quotes if it has spaces). Admins can also use every `/war rank` command
+while standing in any kingdom's main claim. Operators who switch on Flan's own
 admin mode can still manage inactive claims through Flan.
 
 ---
@@ -380,6 +438,16 @@ values are:
 | `leaderboard.time_zone` | server zone | e.g. `America/New_York` for log timestamps |
 | `conquest.use_ftb_teams` | `true` | |
 | `general.prevent_sleep_time_skip_during_raids` | `true` | |
+| `kingdom_ranks.enabled` / `require_membership` | `true` | Ranks on/off; holders must be Flan members of the kingdom |
+| `kingdom_ranks.max_ranks_per_kingdom` / `max_rank_name_length` / `max_decoration_length` | `20` / `24` / `4` | |
+| `kingdom_ranks.allowed_decoration_symbols` | `""` | If set, the only symbols decorations may use |
+| `kingdom_ranks.allow_hex_colors` / `allow_gradients` / `max_gradient_colors` | `true` / `true` / `5` | |
+| `kingdom_ranks.allow_bold` / `allow_glow` / `allow_rainbow` / `allow_pulse` / `allow_wave` | `true` | |
+| `kingdom_ranks.allow_obfuscated` | `false` | |
+| `kingdom_ranks.animation_update_interval_ticks` | `20` | How often animated tags update |
+| `rank_chat.enabled` / `format` | `true` / `[{rank}] {player}: {message}` | |
+| `rank_nametags.enabled` / `default_position` / `separator` | `true` / `LEFT` / ` \| ` | |
+| `rank_nametags.allow_above_position` / `allow_below_position` / `allow_player_overrides` | `true` | Disabled positions fall back to LEFT |
 
 Fixed rules (deliberately not configurable, for safety):
 
@@ -429,5 +497,19 @@ Fixed rules (deliberately not configurable, for safety):
   are reported by `/war admin stats check` but never invented afterwards.
 - **Kingdom names** come from FTB Teams via reflection. If the team type or name can't be
   read, `/war admin status` says so and teams are shown by a short id.
+- **Rank nametags** use vanilla tricks:
+  - `LEFT` is a scoreboard team prefix. A player who is already in another plugin's or
+    datapack's scoreboard team keeps that team, and their rank shows `BELOW` instead (or in chat
+    only, if `BELOW` is disabled).
+  - `BELOW` and `ABOVE` are invisible marker entities riding the player, so they move smoothly.
+    They sit at fixed heights, so the gap to the player's name can't be fine-tuned.
+  - Labels hide while the player sneaks, is invisible, spectates or is dead. They also hide
+    while swimming, because vanilla drops passengers under water, and come back on leaving the
+    water.
+  - With `LEFT`, vanilla death messages and other mods that print the player's display name
+    show the rank too.
+- **Chat tags** replace the chat line through Forge's chat event. Another chat-formatting mod on
+  the server may override them, or be overridden; set `rank_chat.enabled = false` to keep the
+  other mod's format.
 - **Scoreboard:** Flan's scoreboard criterion for used claim blocks does not subtract conquered
   land. Flan's own block checks and `/flan` messages do.

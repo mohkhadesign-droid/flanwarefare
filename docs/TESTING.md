@@ -54,7 +54,10 @@ with at least two accounts, A and B. Set `raid.mode` with `/war admin mode` and 
 
 | Effective-permission diff wording (CANSTAY gained/lost, lists), no diff -> no lines; group switch with identical permissions is silent | `permissionDiff`, `membershipChanges` | as specified | **PASS** |
 
-Result of the last run: `LogicSelfTest: all 143 checks passed` (locally, and on every GitHub
+| Rank colours: names, hex, hex disabled, invalid input; 2- and 3-stop gradients; solid, rainbow and wave frames differ by phase; naming of colours | `rankColors` | as specified | **PASS** |
+| Rank names (spaces, length, formatting codes); decorations (symbols, section sign, control characters, allow-list); position priority and disabled fallbacks; chat format tokens and validation | `rankRules` | as specified | **PASS** |
+
+Result of the last run: `LogicSelfTest: all 174 checks passed` (locally, and on every GitHub
 Actions build as part of `./gradlew build`).
 
 ## In-game scenarios (all NOT RUN)
@@ -222,6 +225,37 @@ Actions build as part of `./gradlew build`).
 | E11 | Conqueror opens Claim-Menu → Edit Permissiongroups, adds the former owner, edits CANSTAY | Works; former owner notified and gets exactly those permissions; resize still refused. |
 | E12 | Old config with radius 2.0 and a custom capture time 120 | After update: radius 3.0 (logged), capture time stays 120. Restart again: nothing logged. |
 | E13 | `/war admin version` and the startup log | Same version and build number as the jar name. |
+
+## Kingdom rank scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| F1 | A runs `/war rank setmain` in own claim, then `/war rank create Royal Guard` | Created; `/war rank list` shows it with an id, white. |
+| F2 | `/war rank setmain` in B's claim or in an admin claim | Refused. |
+| F3 | `color "Royal Guard" gold`, `gradient "Royal Guard" #FFD700 #FF4500 #8B0000`, `gradient … clear` | Preview shows gold, a 3-colour gradient, then the first colour. |
+| F4 | Hex colour with `allow_hex_colors = false`; 6 gradient colours with max 5 | Clear refusals. |
+| F5 | `prefix "Royal Guard" ⚔`, `suffix "Royal Guard" ⚔`; prefix with `§c` or a 5-character string | Decorations shown; the bad ones refused. |
+| F6 | `assign B "Royal Guard"` while B is not a Flan member | Refused, pointing to Flan groups. |
+| F7 | Add B to a group in Flan's menu, assign again | Assigned; B is told. B's nametag reads "⚔ Royal Guard ⚔ \| B" and the tab list shows it. |
+| F8 | B chats | `[⚔ Royal Guard ⚔] B: hello`; links in the message still clickable. |
+| F9 | `position "Royal Guard" below`, then `above` | Rank on its own line under B's name / above it, moving smoothly while B sprints and jumps. |
+| F10 | B attacks and is attacked through the label area; right-clicks a villager behind it | Hits and clicks are never blocked. |
+| F11 | B runs `/war rank playerposition B left`; then `reset` | B's own placement wins; reset returns to the rank default. |
+| F12 | `allow_player_overrides = false`, reload | Personal settings ignored (kept in data). |
+| F13 | `effect "Royal Guard" rainbow` / `wave` / `pulse` | Nametag colours move about once per second; chat shows one frame. |
+| F14 | `effect … obfuscated` with the default config | Refused (disabled). |
+| F15 | Remove B from the claim in Flan | Within 2 s the tag disappears from nametag and chat; `/war rank members` shows "suspended". Re-adding restores it. |
+| F16 | Owner of kingdom C tries to assign B (who holds A's rank) | Refused; `/war admin rank assign` moves it. |
+| F17 | B sneaks / drinks invisibility / goes spectator / dies | Label hidden / hidden / removed / removed, back after respawn. |
+| F18 | B swims under water, then climbs out | Label disappears, comes back within half a second. |
+| F19 | B goes through a nether portal | Label rebuilt in the Nether; no stray label left in the Overworld. |
+| F20 | B logs out; server restarts; `/kill @e[type=armor_stand]` count before and after | No leftover label entities; B's label comes back at login. |
+| F21 | Simulated crash (kill the server process) with B online, restart | No stray floating label at B's old position. |
+| F22 | Put B in a vanilla `/team` first, rank position LEFT | Vanilla team untouched; rank shown BELOW; `/war rank info B` explains why. |
+| F23 | Kingdom A's main claim is conquered by D | D is told they manage the ranks; inside the claim D can use `/war rank list/create/assign`; A can no longer. |
+| F24 | Main claim deleted in Flan | Registry removed within 5 s; holders' tags disappear. |
+| F25 | `rename "Royal Guard" Elite Guard` | All holders show the new name immediately; ids unchanged. |
+| F26 | Grant and revoke ranks while checking Flan access (doors, containers, `/flan` permissions) | Flan access identical with and without ranks. |
 
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
