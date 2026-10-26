@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Build and run logic tests
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Report compile errors as annotations
+        if: failure()
+        run: |
+          grep -E "error:" -A3 build.log | grep -vE "^\s*\^\s*$" | head -n 80 | cut -c1-400 > errors.txt || true
+          grep -E "What went wrong|check failed" -A2 build.log | head -n 6 >> errors.txt || true
+          split -l 8 errors.txt chunk_ || true
+          for f in chunk_*; do
+            [ -f "$f" ] || continue
+            echo "::error title=Build output::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' "$f")"
+          done
+
+      - name: Probe mapped Minecraft names (diagnostic)
+        if: always()
+        run: |
+          JAR=$(find ~/.gradle/caches -name "forge-1.16.5-*_mapped_snapshot_*.jar" ! -name "*sources*" | head -n 1)
+          [ -n "$JAR" ] || exit 0
+          probe() { javap -p -cp "$JAR" "$1" | grep -E "$2" | sed 's/^ *//' | cut -c1-200 > probe.txt; echo "::notice title=$1::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' probe.txt | cut -c1-3900)"; }
+          probe 'net.minecraftforge.event.entity.player.PlayerEvent$TabListNameFormat' '.'
+          probe net.minecraft.entity.player.ServerPlayerEntity 'TabList|ping|connection'
+          probe net.minecraft.network.PacketBuffer 'TextComponent'
+          probe net.minecraft.network.NetworkManager 'channel|Channel'
+          probe net.minecraft.network.play.server.SPlayerListHeaderFooterPacket '.'
+          probe net.minecraft.network.play.server.SPlayerListItemPacket 'public|Action'
+          probe net.minecraft.network.play.client.CResourcePackStatusPacket '.'
+          probe 'net.minecraft.network.play.client.CResourcePackStatusPacket$Action' '.'
+          probe net.minecraft.network.play.ServerPlayNetHandler 'netManager|NetworkManager|sendPacket'
+          probe net.minecraft.server.management.PlayerList 'sendPacketToAllPlayers|getPlayers|getCurrentPlayerCount'
+
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: grandtab-jar
+          path: build/libs/*.jar
+          if-no-files-found: error

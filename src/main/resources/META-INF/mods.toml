@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="grandtab"
+version="${file.jarVersion}"
+displayName="Grand Tab List"
+authors="grandtab"
+description='''
+Server-side custom Tab list: header with logo, title and online count, kingdom rank
+prefixes, live pings and a footer. Clients do not need it.
+'''
+
+[[dependencies.grandtab]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.grandtab]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="BOTH"
