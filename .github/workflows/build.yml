@@ -23,6 +23,14 @@ jobs:
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
           ./gradlew -p designer-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
+      - name: Check server-side methods are not client-only
+        run: |
+          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
+          javap -v -cp "$J" net.minecraft.inventory.container.ContainerType > ct.txt
+          javap -v -cp "$J" net.minecraft.inventory.container.Container > c.txt
+          echo "::warning title=CT::$(grep -nE 'public (T|java.lang.Object|net.minecraft.inventory.container.Container) create|OnlyIn|Dist' ct.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+          echo "::warning title=C::$(grep -nE 'getType\(\)|OnlyIn' c.txt | head -20 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+
       - name: Report compile errors as annotations
         if: failure()
         run: |
