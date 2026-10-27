@@ -54,6 +54,7 @@ public final class WarCore {
     private final MemberNotices members;
     private final RankService ranks;
     private final RankDisplay rankDisplay;
+    private final net.flanwarfare.flag.FlagDesigner designer;
     private volatile boolean ready;
     private long ticks;
     private long lastSaveTick;
@@ -74,6 +75,7 @@ public final class WarCore {
         this.members = new MemberNotices(this);
         this.ranks = new RankService(this);
         this.rankDisplay = new RankDisplay(this);
+        this.designer = new net.flanwarfare.flag.FlagDesigner(this);
     }
 
     /** The current core, possibly in safe mode. */
@@ -251,6 +253,10 @@ public final class WarCore {
 
     public WarStats stats() {
         return stats;
+    }
+
+    public net.flanwarfare.flag.FlagDesigner designer() {
+        return designer;
     }
 
     public RankService ranks() {

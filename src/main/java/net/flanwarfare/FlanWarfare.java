@@ -58,6 +58,7 @@ public final class FlanWarfare {
                 (ModConfig.Loading event) -> WarConfig.onConfigEvent(event));
         FMLJavaModLoadingContext.get().getModEventBus().addListener(
                 (ModConfig.Reloading event) -> WarConfig.onConfigEvent(event));
+        net.flanwarfare.flag.FlagDesigner.registerChannel();
         MinecraftForge.EVENT_BUS.register(new WarEvents());
     }
 }
