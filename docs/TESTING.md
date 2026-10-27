@@ -372,6 +372,22 @@ that add banner patterns).
 | B2 | Let it rotate; drag | The backdrop pans gently with the rotation and wraps without a seam. |
 | B3 | GUI scale 2, 3, 4, Auto | The backdrop fills only the preview box. |
 
+## Subclaim group scenarios (all NOT RUN)
+
+Owner O (not an operator) owns kingdom claim K, which has a flag, and subclaim S inside it.
+Player P is not an operator and has no other access to K.
+
+| # | Scenario | Expected |
+|---|---|---|
+| G1 | O: `/flan switchMode` (subclaim mode), stands in S: `/flan group add Builder`, `/flan permission group Builder place true`, `/flan permission group Builder break true`, `/flan group players add Builder P` | Each succeeds. |
+| G2 | O in S (subclaim mode): `/flan info group` | `Builder: Permissions: (BREAK=true, PLACE=true) Players: [P]`. |
+| G3 | P places and breaks blocks inside S | Allowed. |
+| G4 | P places and breaks blocks in K outside S | Denied (Flan's no-permission message). |
+| G5 | O back in normal mode, standing in K: `/flan info group` | K has no Builder group with P (unless created separately). |
+| G6 | Restart the server; repeat G2 and G3 | Same. |
+| G7 | O in S (subclaim mode): `/flan group players remove Builder P` | P can no longer build in S. |
+| G8 | During a raid: P builds in S | Allowed (Flan's answer kept). P is treated as a defender. |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.

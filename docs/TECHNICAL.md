@@ -996,3 +996,32 @@ Claims without a flag aren't handled, and Flan teleports normally.
 - **Drawing:** it is blitted into the preview box only, at z 0, before the model. The u offset
   is ¼ of the yaw. A soft vignette sits at the top and bottom. The model is drawn afterwards,
   sharp, with the same scissor as before.
+
+## 28. Subclaim groups: backport of Flan 1.8.4's fix (Flan Warfare 1.5.1)
+
+### Cause (Flan 1.7.2, verified in its bytecode)
+`CommandClaim.editPerms` (`/flan permission ...`) and `claimInfo` (`/flan info`) switch to the
+subclaim at the player's feet when the player is in subclaim edit mode. Two commands don't:
+- `modifyGroup`: `/flan group add|remove <group>`;
+- `modifyPlayer`: `/flan group players add|remove <group> <players>`.
+
+Both always use `ClaimStorage.getClaimAt(pos)`, the main claim. So in subclaim mode, a group's
+permissions landed on the subclaim while its players landed on a same-named group of the main
+claim. `/flan info group` showed `Players: []`, and the player couldn't build in the subclaim.
+Flan fixed this in 1.8.4 (Flemmli97/Flan@82124199e1).
+
+### Fix
+`CommandClaimMixin` targets `CommandClaim`:
+- It injects at the HEAD of both methods to remember the command's player.
+- It redirects their single `getClaimAt` call through `SubclaimCommands.pick`: in
+  `EnumEditMode.SUBCLAIM`, standing in a subclaim, the command edits that subclaim, as in Flan
+  1.8.4.
+
+Flan's EDITPERMS and owner checks, storage and saving are untouched, so changes persist like
+any Flan edit. The `/flan menu` GUI already handled subclaim mode and is unchanged.
+
+### Permissions
+Flan's `Claim.canInteract` hands any position inside a subclaim to that subclaim's own check. A
+player in a subclaim group with BREAK/PLACE can therefore build in that subclaim only. During
+raids, Flan Warfare's `RaidPermissions` leaves players Flan authorizes at the spot (including
+members of the subclaim there) with exactly Flan's answer.
