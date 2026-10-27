@@ -357,6 +357,21 @@ that add banner patterns).
 | S9 | Sneak-right-click it with a block in hand | The block is placed against it; nothing opens. |
 | S10 | Remove the Designer mod again | Server and clients start; placed designers vanish (missing-block warning); flags and designs unchanged. |
 
+## Claim teleport and backdrop scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| T1 | `/flan teleport` to a claim whose home is the flag (e.g. after a conquest), flag outdoors | Arrive on the ground one block from the base, on the side away from the banner, facing the flag. |
+| T2 | Same, with that side walled off | Arrive on another side or corner. |
+| T3 | Flag indoors or underground with a roof above | Arrive on the floor beside the base, not on the roof. |
+| T4 | Surround the base with lava or blocks (no safe spot within 2 blocks) | "Teleport cancelled: there is no safe spot..."; the player stays where they were. |
+| T5 | Start the teleport, then block the chosen side during the 5 s wait | The new situation is used (another side, or cancelled). |
+| T6 | Move during the 5 s wait; player without teleport permission | Flan's own cancel and refusal messages, unchanged. |
+| T7 | Teleport to a claim without a flag | Flan's normal behaviour. |
+| B1 | Open the designer | Blurred daylight landscape behind the flag; the flag sharp; text, buttons and grid sharp. |
+| B2 | Let it rotate; drag | The backdrop pans gently with the rotation and wraps without a seam. |
+| B3 | GUI scale 2, 3, 4, Auto | The backdrop fills only the preview box. |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.

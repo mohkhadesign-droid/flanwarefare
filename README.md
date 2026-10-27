@@ -359,7 +359,8 @@ stands in.
 - Mine it with an axe; it drops itself.
 - Admins can also hand one out with `/flanwarfare designer give [player]`.
 
-- **3D preview (left).** The real flag model (upper pole, crossbar, finial and banner), drawn
+- **3D preview (left).** It now sits in front of a softly blurred daylight landscape (grass,
+  oak trees, hills, sky) that pans gently as the flag turns. The real flag model (upper pole, crossbar, finial and banner), drawn
   with the same renderer as the world.
   - It turns once every 15 s.
   - **Drag** it to turn and tilt it, and **scroll** to zoom.
@@ -411,6 +412,21 @@ inventory key close without saving.
   false.
 
 Without the Designer mod, use `/flag design set` and `/flag design apply`.
+
+### Claim teleports land beside the flag
+
+`/flan teleport` to a claim **with a flag** now puts you about **one block beside the flag's
+base, standing on the floor**, facing the flag. You no longer land on top of the flagpole, on
+the banner or on a roof above the flag.
+- **Which side:** the side away from the banner first, then the other sides and corners, then
+  two blocks out.
+- **What counts as safe:** the spot must be inside the same claim, on solid ground, with room
+  to stand, and with no lava, fire, cactus or other hazard. It can be at the base's level, one
+  block lower or one block higher, so flags indoors and underground work too.
+- **When it's checked:** at the moment of the teleport, after Flan's usual 5-second "don't
+  move" wait. Flan's permission check, delay and cancel-on-move are unchanged.
+- **No safe spot:** the teleport is cancelled with a message.
+- **Claims without a flag** teleport exactly as Flan always did.
 
 ### Sides and defenders
 
