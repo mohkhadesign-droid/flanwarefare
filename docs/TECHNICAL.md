@@ -927,48 +927,37 @@ Capture rules, speed, contest and decay are unchanged.
 - vanilla and modded item patterns, with and without the item;
 - the `clip` helper.
 
-## 26. Flag Designer station (Flags 1.3.0 / Flan Warfare 1.3.0)
+## 26. Flan Warfare Designer: a separate mod (Designer 1.0.0 / Flags 1.4.0 / Flan Warfare 1.4.0)
 
-### The block
-- `flanwarfareflags:flag_designer`, a `FlagDesignerBlock` with an EPIC-rarity `BlockItem`
-  that isn't in any item group.
-- **Can't be obtained in survival:** hardness −1, no drops (`noDrops`, no loot table),
-  `PushReaction.BLOCK`, no recipe. It comes only from `/flanwarfare designer give` (admin) or
-  `/give`.
-- **Textures** are original pixel art from `flags-mod/make_designer_texture.py`.
+### The three mods
+- **Flags 1.4.0** has exactly the source of build #22 (Flags 1.0.0): the flag model and the
+  capture HUD only. All designer code was removed from it.
+- **`designer-mod/` (`flanwarfaredesigner`)** contains:
+  - the `FlagDesignerBlock` (craftable, axe, drops itself);
+  - `FlagDesignerContainer` (the Banner Pattern Item slot);
+  - `FlagDesignerScreen` and `DesignerClient`;
+  - `PreviewRenderer`, a copy of the flag model geometry for the 3D preview, with its own
+    `flag_parts.png`. The mod has no dependency on the Flags mod.
+- **Registry and channel ids:**
+  - block and item: `flanwarfaredesigner:flag_designer`;
+  - menu: `flanwarfaredesigner:designer`;
+  - result channel: `flanwarfaredesigner:designer`;
+  - saves still go to `flanwarfare:designer`.
+- **Recipe:** gold ingot, any banner (`#minecraft:banners`), gold ingot / planks, loom, planks
+  / three planks.
 
-### Links
-- `WarData.designerStations` maps `"dimension|blockPosLong"` → claim UUID and is saved in the
-  war data JSON.
-- **Linking flow** (`FlagDesigner.useStation` / `completeLink`):
-  1. An admin sneak-right-clicks the station, which sets a 60 s `PendingLink`.
-  2. The admin's next right- or left-click on any flag block (from `FlagService.flagBlockIndex`)
-     stores station → that flag's claim.
-  3. Sneak-right-clicking the same station again while linking removes the link.
-- **Following the flag:** links point at the claim, not at block positions, so `/flag move`
-  keeps them valid.
-- **Cleanup:** breaking the station (creative) clears its link (`WarEvents.onBreak` →
-  `onBlockRemoved`).
-
-### Opening
-- `WarEvents.onRightClickBlock` (priority HIGHEST, server) cancels the interaction on a
-  station with result SUCCESS, so claim mods and the block's own handler don't act, and opens
-  the designer for the linked claim through the same `open(...)` path as before. The session
-  remembers the station.
-- **Access:** the owner, or an admin with `designer_admin_override`. For stations,
-  `designer_station_access` = `OWNER` | `MEMBERS` (Flan members of the claim or its subclaims)
-  | `ANYONE`.
-
-### Saving
-In addition to §25.5, the server checks:
-- the station still exists and is still linked to the same claim;
-- the player is in the same dimension, within 8 blocks of it;
-- access, using the same rule as when opening.
-
-On success the design is applied to the linked flag immediately, through the normal path.
-Cancel and Escape just close the menu: nothing is sent, and the pattern item is returned.
-
-### Left-click
-Flag left-clicks no longer open or cancel anything by default
-(`designer_open_on_flag_left_click = false`). That is the behaviour from before the designer
-existed. They are used only to complete an admin link.
+### Server (Flan Warfare)
+- **Opening.** `WarEvents.onRightClickBlock` (priority HIGHEST) catches right-clicks on a Flag
+  Designer and cancels them with SUCCESS. Sneaking with an item in hand is left alone, so blocks
+  can still be placed against it. It then:
+  1. finds the parent claim at the block (`FlanBridge.parentAt`);
+  2. requires a conquest flag (not an admin or excluded claim, and `hasFlag`);
+  3. opens the designer for that claim, applying `designer_station_access`.
+- **Save checks,** in addition to §25.5:
+  - the block still exists;
+  - it still stands in the same claim;
+  - the player is within 8 blocks of it.
+- **Removed:** admin station linking and the link data from 1.3.0. Old war data files that
+  contain `designerStations` still load; the field is ignored.
+- **Left-click:** left-clicking a flag does nothing designer-related unless
+  `designer_open_on_flag_left_click` is on.

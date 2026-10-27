@@ -2,7 +2,7 @@
 import random
 from PIL import Image
 
-OUT = "src/main/resources/assets/flanwarfareflags/textures/block/"
+OUT = "src/main/resources/assets/flanwarfaredesigner/textures/block/"
 rnd = random.Random(7)
 FRAME = [(58, 38, 22), (66, 44, 26), (50, 33, 19)]
 PLANK = [(122, 86, 52), (132, 94, 57), (112, 79, 47), (138, 100, 62)]

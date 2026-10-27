@@ -1,9 +1,9 @@
-package net.flanwarfare.flags.client;
+package net.flanwarfare.designer.client;
 
 import com.mojang.blaze3d.matrix.MatrixStack;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.datafixers.util.Pair;
-import net.flanwarfare.flags.FlagDesignerContainer;
+import net.flanwarfare.designer.FlagDesignerContainer;
 import net.minecraft.client.MainWindow;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.SimpleSound;
@@ -131,7 +131,7 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
     private final Set<String> alreadyOnFlag = new HashSet<>();
     private final List<BannerPattern> gridPatterns = new ArrayList<>();
     private final Map<BannerPattern, TextureAtlasSprite> sprites = new HashMap<>();
-    private final ModelRenderer fabric = FlagRenderer.newFabric();
+    private final ModelRenderer fabric = PreviewRenderer.newFabric();
 
     private Design design = new Design();
     private final Deque<Design> undo = new ArrayDeque<>();
@@ -903,11 +903,11 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
         RenderHelper.setupGui3DDiffuseLighting();
         IRenderTypeBuffer.Impl buffers = mc.getRenderTypeBuffers().getBufferSource();
         int light = 0xF000F0;
-        FlagRenderer.drawStructure(ms, buffers, light, OverlayTexture.NO_OVERLAY, 40.0F, true);
+        PreviewRenderer.drawStructure(ms, buffers, light, OverlayTexture.NO_OVERLAY, 40.0F, true);
         List<Pair<BannerPattern, DyeColor>> layers = new ArrayList<>();
         layers.add(Pair.of(BannerPattern.BASE, design.base));
         layers.addAll(design.layers);
-        FlagRenderer.drawFabric(ms, buffers, light, OverlayTexture.NO_OVERLAY, fabric, 90.0F, layers);
+        PreviewRenderer.drawFabric(ms, buffers, light, OverlayTexture.NO_OVERLAY, fabric, 90.0F, layers);
         buffers.finish();
         ms.pop();
         GL11.glDisable(GL11.GL_SCISSOR_TEST);

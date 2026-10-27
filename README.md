@@ -337,26 +337,27 @@ To get the hourglass design from the reference picture, give yourself this banne
 `/flag design set` and `/flag design apply`:
 `/give @s black_banner{BlockEntityTag:{Patterns:[{Pattern:"tt",Color:4},{Pattern:"bt",Color:4},{Pattern:"mc",Color:15},{Pattern:"bo",Color:14}]}}`
 
-### Flag Designer (with the flags mod)
+### Flag Designer (optional Flan Warfare Designer mod)
 
-**Open it from a Flag Designer station.** This is a block that admins hand out and link to a
-claim's flag:
+The designer is a **separate, optional mod**: `flanwarfaredesigner-*.jar`. Install it on the
+server and on every player's game. Removing it later removes only the designer; claims, flags
+and saved designs stay.
 
-1. An admin runs **`/flanwarfare designer give [player]`**. There is no recipe, it isn't in
-   the creative menu, it can't be mined in survival, it drops nothing and pistons can't move
-   it.
-2. The admin places it, **sneak-right-clicks** it, then **right-clicks the claim's flag**
-   within 60 s. The link is saved and survives restarts. It follows the claim, so `/flag move`
-   keeps it working.
-   - Sneak-right-clicking the station twice unlinks it.
-   - **`/flanwarfare designer list`** shows every station and its linked claim.
-3. Players **right-click the station** to open the designer for the linked flag.
-   - By default only the claim's owner can use it. `designer_station_access` can be set to
-     `OWNER`, `MEMBERS` or `ANYONE`.
-   - Saving applies the design to the linked flag at once. Cancel discards the changes.
+**Craft a Flag Designer:**
 
-Left-clicking the flag itself no longer opens the designer, unless you turn on
-`designer_open_on_flag_left_click`.
+```
+ Gold ingot | Any banner | Gold ingot
+ Planks     | Loom       | Planks
+ Planks     | Planks     | Planks
+```
+
+**Place it inside your claim and right-click it.** It always designs the flag of the claim it
+stands in.
+- By default only that claim's owner can use it. `designer_station_access` can be set to
+  `OWNER`, `MEMBERS` or `ANYONE`.
+- **Save Flag** changes the claim's flag at once. **Cancel** discards your changes.
+- Mine it with an axe; it drops itself.
+- Admins can also hand one out with `/flanwarfare designer give [player]`.
 
 - **3D preview (left).** The real flag model (upper pole, crossbar, finial and banner), drawn
   with the same renderer as the world.
@@ -409,8 +410,7 @@ inventory key close without saving.
 - `designer_open_on_flag_left_click`: also open the designer from the flag itself. Default
   false.
 
-Without the flags mod (1.1 or newer), left-clicking a flag tells the owner to use
-`/flag design`.
+Without the Designer mod, use `/flag design set` and `/flag design apply`.
 
 ### Sides and defenders
 
@@ -446,7 +446,7 @@ Without the flags mod (1.1 or newer), left-clicking a flag tells the owner to us
 | `/flag design set` | Save the banner in your main hand as your design. The banner is not consumed. |
 | `/flag design apply` | Show your saved design on the flag of the claim you stand in. |
 | `/flag design reset` | Go back to the default banner. |
-| *(right-click a Flag Designer station)* | Open the Flag Designer for the station's linked flag. |
+| *(right-click a Flag Designer)* | Open the Flag Designer for the flag of the claim it stands in (Designer mod). |
 | `/war status` | Whether a raid is active and when the next change happens. |
 | `/war capture` | Captures on your claims or within 64 blocks. |
 | `/war alerts on` / `off` | Unmute or mute live raid alerts for yourself. |

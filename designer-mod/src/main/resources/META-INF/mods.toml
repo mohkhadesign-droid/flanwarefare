@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="flanwarfaredesigner"
+version="${file.jarVersion}"
+displayName="Flan Warfare Designer"
+authors="flanwarfare"
+description='''
+The Flag Designer workstation for Flan Warfare & Conquest. Craft it, place it inside your claim
+and right-click it to design your claim's flag with a live 3D preview. Install on the server
+(next to Flan Warfare) AND on every client. Optional: removing it removes only the designer.
+'''
+
+[[dependencies.flanwarfaredesigner]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.flanwarfaredesigner]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="BOTH"

@@ -1,4 +1,4 @@
-package net.flanwarfare.flags.client;
+package net.flanwarfare.designer.client;
 
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.EncoderException;

@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GBG",
+    "PLP",
+    "PPP"
+  ],
+  "key": {
+    "G": { "item": "minecraft:gold_ingot" },
+    "B": { "tag": "minecraft:banners" },
+    "L": { "item": "minecraft:loom" },
+    "P": { "tag": "minecraft:planks" }
+  },
+  "result": { "item": "flanwarfaredesigner:flag_designer", "count": 1 }
+}

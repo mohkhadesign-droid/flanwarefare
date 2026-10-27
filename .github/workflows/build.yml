@@ -21,6 +21,7 @@ jobs:
           set -o pipefail
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
+          ./gradlew -p designer-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
       - name: Report compile errors as annotations
         if: failure()
@@ -40,4 +41,5 @@ jobs:
           path: |
             build/libs/*.jar
             flags-mod/build/libs/*.jar
+            designer-mod/build/libs/*.jar
           if-no-files-found: error

@@ -307,16 +307,15 @@ public final class WarConfig {
                 .defineInRange("movement_cooldown_seconds", 300, 0, 86400 * 7);
         MIN_FLAG_DISTANCE = b.comment("Minimum distance between two registered flags, in blocks (7 keeps 3-block capture zones apart).")
                 .defineInRange("min_flag_distance", 7, 2, 64);
-        DESIGNER_ENABLED = b.comment("The Flag Designer (needs the Flan Warfare Flags mod on server and clients). It opens from",
-                        "Flag Designer station blocks linked to a flag (/flanwarfare designer give; admins link a station by",
-                        "sneak-right-clicking it and then right-clicking a flag).")
+        DESIGNER_ENABLED = b.comment("The Flag Designer (needs the optional Flan Warfare Designer mod on server and clients).",
+                        "Players craft a Flag Designer, place it inside their claim and right-click it to design that claim's flag.")
                 .define("designer_enabled", true);
         DESIGNER_ADMIN_OVERRIDE = b.comment("Operators (admin permission level) may open and save the designer of any claim's flag.")
                 .define("designer_admin_override", false);
         DESIGNER_LEFT_CLICK = b.comment("Also open the designer by left-clicking the flag itself (owner only). Off by default:",
-                        "the designer opens from linked stations.")
+                        "the designer opens from Flag Designer blocks.")
                 .define("designer_open_on_flag_left_click", false);
-        DESIGNER_STATION_ACCESS = b.comment("Who may use a station: OWNER (only the linked claim's owner), MEMBERS (the owner and",
+        DESIGNER_STATION_ACCESS = b.comment("Who may use a Flag Designer: OWNER (only the owner of the claim it stands in), MEMBERS (the owner and",
                         "players invited to the claim in Flan), ANYONE. Saving re-checks this on the server.")
                 .define("designer_station_access", "OWNER", o -> o instanceof String && ("OWNER".equalsIgnoreCase((String) o)
                         || "MEMBERS".equalsIgnoreCase((String) o) || "ANYONE".equalsIgnoreCase((String) o)));
