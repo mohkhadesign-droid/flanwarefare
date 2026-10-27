@@ -77,6 +77,8 @@ public final class WarConfig {
     public static final ForgeConfigSpec.ConfigValue<String> DEFAULT_BANNER_COLOR;
     public static final ForgeConfigSpec.BooleanValue DESIGNER_ENABLED;
     public static final ForgeConfigSpec.BooleanValue DESIGNER_ADMIN_OVERRIDE;
+    public static final ForgeConfigSpec.BooleanValue DESIGNER_LEFT_CLICK;
+    public static final ForgeConfigSpec.ConfigValue<String> DESIGNER_STATION_ACCESS;
     public static final ForgeConfigSpec.ConfigValue<String> RESTORE_SUPPORT_BLOCK;
     public static final ForgeConfigSpec.IntValue RESTORE_CHECK_SECONDS;
     public static final ForgeConfigSpec.BooleanValue PROTECT_FLAGS;
@@ -305,11 +307,19 @@ public final class WarConfig {
                 .defineInRange("movement_cooldown_seconds", 300, 0, 86400 * 7);
         MIN_FLAG_DISTANCE = b.comment("Minimum distance between two registered flags, in blocks (7 keeps 3-block capture zones apart).")
                 .defineInRange("min_flag_distance", 7, 2, 64);
-        DESIGNER_ENABLED = b.comment("Left-clicking a claim's flag opens the Flag Designer for the claim owner",
-                        "(needs the Flan Warfare Flags mod on server and clients).")
+        DESIGNER_ENABLED = b.comment("The Flag Designer (needs the Flan Warfare Flags mod on server and clients). It opens from",
+                        "Flag Designer station blocks linked to a flag (/flanwarfare designer give; admins link a station by",
+                        "sneak-right-clicking it and then right-clicking a flag).")
                 .define("designer_enabled", true);
         DESIGNER_ADMIN_OVERRIDE = b.comment("Operators (admin permission level) may open and save the designer of any claim's flag.")
                 .define("designer_admin_override", false);
+        DESIGNER_LEFT_CLICK = b.comment("Also open the designer by left-clicking the flag itself (owner only). Off by default:",
+                        "the designer opens from linked stations.")
+                .define("designer_open_on_flag_left_click", false);
+        DESIGNER_STATION_ACCESS = b.comment("Who may use a station: OWNER (only the linked claim's owner), MEMBERS (the owner and",
+                        "players invited to the claim in Flan), ANYONE. Saving re-checks this on the server.")
+                .define("designer_station_access", "OWNER", o -> o instanceof String && ("OWNER".equalsIgnoreCase((String) o)
+                        || "MEMBERS".equalsIgnoreCase((String) o) || "ANYONE".equalsIgnoreCase((String) o)));
         DEFAULT_BANNER_COLOR = b.comment("Banner colour used when a player has no saved design.")
                 .define("default_banner_color", "white");
         RESTORE_SUPPORT_BLOCK = b.comment("Block placed under a flag during restoration if its support vanished.")

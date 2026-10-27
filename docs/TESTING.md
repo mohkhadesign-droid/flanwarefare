@@ -342,6 +342,23 @@ that add banner patterns).
 | D23 | Server without the flags mod, or with the old 1.0.0 jar | Owner's left-click gives the `/flag design` hint. |
 | D24 | Regression: claim creation, `/flag place`, `/flag move`, capture zone and raid, claim removal, restart | All unchanged. |
 
+## Flag Designer station scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| S1 | Admin: `/flanwarfare designer give`; non-admin tries the command | Admin gets the "Flag Designer" item (purple name); non-admin: unknown command. |
+| S2 | Look for a recipe in JEI or the creative menu; mine it in survival; push it with a piston | No recipe or tab entry; can't be mined; doesn't move. |
+| S3 | Admin places it, sneak-right-clicks, then right-clicks claim C's flag | "Flag Designer linked to the flag of claim ..."; `/flanwarfare designer list` shows it. |
+| S4 | C's owner right-clicks the station; edits; Save | Designer opens; after Save the flag on C's pole changes for everyone nearby. |
+| S5 | Owner edits, then Cancel or Escape | Flag unchanged; pattern item returned. |
+| S6 | Non-owner right-clicks (access OWNER, then MEMBERS as a Flan member, then ANYONE) | Refused; then allowed for members; then allowed for anyone. |
+| S7 | Open, walk 10 blocks away (or an admin breaks the station), then Save | "Move back to the Flag Designer to save." / "removed or relinked"; edit kept. |
+| S8 | Unlinked station right-clicked | "not linked to a flag yet" message. |
+| S9 | `/flag move` C's flag, then use the station | Still linked; saving updates the moved flag. |
+| S10 | Restart the server | Links kept. |
+| S11 | Admin sneak-right-clicks the station twice | "now unlinked". |
+| S12 | Left-click a flag (default config) | Nothing opens; flag not damaged. |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.

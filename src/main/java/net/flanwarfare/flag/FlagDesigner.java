@@ -17,6 +17,10 @@ import net.flanwarfare.flan.FlanBridge;
 import net.flanwarfare.logic.DesignRules;
 import net.flanwarfare.util.Msg;
 import net.minecraft.block.BannerBlock;
+import net.minecraft.block.BlockState;
+import net.minecraft.util.ActionResultType;
+import net.minecraft.util.Hand;
+import net.minecraft.world.server.ServerWorld;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.item.BannerPatternItem;
 import net.minecraft.item.DyeColor;
@@ -73,18 +77,37 @@ public final class FlagDesigner {
     private static final int MAX_WIRE_LAYERS = 16;
     private static EventNetworkChannel channel;
 
+    private static final ResourceLocation STATION_ID = new ResourceLocation("flanwarfareflags", "flag_designer");
+    private static final long LINK_MS = 60 * 1000L;
+    /** Saving from a station needs the player within this distance of it (blocks). */
+    private static final double STATION_REACH = 8.0D;
+
     private static final class Session {
         final UUID claimId;
         final String dimension;
         final BlockPos flagPos;
         final long token;
         final long expires;
+        /** Station key ("dimension|pos") if opened from a Flag Designer station, else null. */
+        final String station;
 
-        Session(UUID claimId, String dimension, BlockPos flagPos, long token, long expires) {
+        Session(UUID claimId, String dimension, BlockPos flagPos, long token, long expires, String station) {
             this.claimId = claimId;
             this.dimension = dimension;
             this.flagPos = flagPos;
             this.token = token;
+            this.expires = expires;
+            this.station = station;
+        }
+    }
+
+    /** An admin's pending "link this station" step: the next flag they click gets linked. */
+    private static final class PendingLink {
+        final String station;
+        final long expires;
+
+        PendingLink(String station, long expires) {
+            this.station = station;
             this.expires = expires;
         }
     }
@@ -92,6 +115,7 @@ public final class FlagDesigner {
     private final WarCore core;
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final Map<UUID, Long> lastOpen = new HashMap<>();
+    private final Map<UUID, PendingLink> pendingLinks = new HashMap<>();
 
     public FlagDesigner(WarCore core) {
         this.core = core;
@@ -115,6 +139,29 @@ public final class FlagDesigner {
         return ForgeRegistries.CONTAINERS.getValue(CONTAINER_ID);
     }
 
+    /** The Flag Designer station item (null if the Flags mod is missing or older than 1.3). */
+    public static Item stationItem() {
+        Item item = ForgeRegistries.ITEMS.getValue(STATION_ID);
+        return item == null || item == net.minecraft.item.Items.AIR ? null : item;
+    }
+
+    private static boolean isStation(BlockState state) {
+        ResourceLocation name = state.getBlock().getRegistryName();
+        return STATION_ID.equals(name);
+    }
+
+    private static String stationKey(String dimension, BlockPos pos) {
+        return dimension + "|" + pos.toLong();
+    }
+
+    private static BlockPos stationPos(String key) {
+        return BlockPos.fromLong(Long.parseLong(key.substring(key.lastIndexOf('|') + 1)));
+    }
+
+    private static String stationDimension(String key) {
+        return key.substring(0, key.lastIndexOf('|'));
+    }
+
     /** True if this player has the designer menu open right now (server view). */
     private static boolean designerOpen(ServerPlayerEntity player) {
         ContainerType<?> type = designerType();
@@ -136,9 +183,13 @@ public final class FlagDesigner {
         return map;
     }
 
-    // ------------------------------------------------------------------ opening
+    // ------------------------------------------------------------------ clicks
 
-    /** Left-click on a block. Flag blocks: cancel the click, open the designer for the owner. */
+    /**
+     * Left-click on a flag block: links a pending station (admin), or opens the designer when
+     * {@code designer_open_on_flag_left_click} is on. Otherwise the click is left alone (the
+     * flag is protected by the normal break rules, as before the designer existed).
+     */
     public void onLeftClick(PlayerInteractEvent.LeftClickBlock event) {
         if (!(event.getPlayer() instanceof ServerPlayerEntity)) {
             return;
@@ -149,23 +200,149 @@ public final class FlagDesigner {
         if (claimId == null) {
             return;
         }
+        if (completeLink(player, claimId)) {
+            event.setCanceled(true);
+            return;
+        }
+        if (!WarConfig.DESIGNER_LEFT_CLICK.get()) {
+            return;
+        }
         event.setCanceled(true); // never mine or break any part of a flag by clicking it
+        open(player, claimId, null);
+    }
+
+    /**
+     * Right-click: on a Flag Designer station it opens the designer for the linked flag (or,
+     * for an admin sneaking, starts linking/unlinking). On a flag block it completes an admin's
+     * pending link. Everything else is left alone.
+     */
+    public void onRightClick(PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getPlayer() instanceof ServerPlayerEntity)) {
+            return;
+        }
+        ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
+        BlockPos pos = event.getPos();
+        String dimension = FlanBridge.dimensionId(player.world);
+        if (isStation(player.world.getBlockState(pos))) {
+            event.setCanceled(true);
+            event.setCancellationResult(ActionResultType.SUCCESS);
+            if (event.getHand() == Hand.MAIN_HAND) {
+                useStation(player, stationKey(dimension, pos));
+            }
+            return;
+        }
+        UUID claimId = core.flags().claimOfFlagBlock(dimension, pos);
+        if (claimId != null && event.getHand() == Hand.MAIN_HAND && completeLink(player, claimId)) {
+            event.setCanceled(true);
+            event.setCancellationResult(ActionResultType.SUCCESS);
+        }
+    }
+
+    private boolean isAdmin(ServerPlayerEntity player) {
+        return player.hasPermissionLevel(Msg.adminLevel());
+    }
+
+    private void useStation(ServerPlayerEntity player, String key) {
+        UUID id = player.getUniqueID();
+        long now = System.currentTimeMillis();
+        if (player.isSneaking() && isAdmin(player)) {
+            PendingLink pending = pendingLinks.get(id);
+            if (pending != null && pending.station.equals(key) && now < pending.expires) {
+                pendingLinks.remove(id);
+                if (core.data().designerStations().remove(key) != null) {
+                    core.data().markDirty();
+                    core.audit("{} unlinked the Flag Designer at {}", player.getGameProfile().getName(), key);
+                    Msg.send(player, Msg.ok("This Flag Designer is now unlinked."));
+                } else {
+                    Msg.send(player, Msg.info("This Flag Designer was not linked. Linking cancelled."));
+                }
+                return;
+            }
+            pendingLinks.put(id, new PendingLink(key, now + LINK_MS));
+            UUID current = core.data().designerStations().get(key);
+            ClaimRecord linked = current == null ? null : core.data().claim(current);
+            Msg.send(player, Msg.info((linked != null ? "Currently linked to claim " + current + ". " : "Not linked yet. ")
+                    + "Now right-click the claim flag to link this Flag Designer to it (60 s). "
+                    + "Sneak-right-click this station again to unlink it."));
+            return;
+        }
+        UUID claimId = core.data().designerStations().get(key);
+        if (claimId == null) {
+            Msg.send(player, Msg.info("This Flag Designer is not linked to a flag yet. An admin links it: sneak-right-click "
+                    + "the station, then right-click a claim flag."));
+            return;
+        }
+        open(player, claimId, key);
+    }
+
+    /** Finishes an admin's pending link if there is one. Returns true if the click was used. */
+    private boolean completeLink(ServerPlayerEntity player, UUID claimId) {
+        PendingLink pending = pendingLinks.get(player.getUniqueID());
+        if (pending == null) {
+            return false;
+        }
+        pendingLinks.remove(player.getUniqueID());
+        if (System.currentTimeMillis() > pending.expires || !isAdmin(player)) {
+            Msg.send(player, Msg.info("Linking timed out. Sneak-right-click the station again."));
+            return true;
+        }
+        ServerWorld world = FlanBridge.world(core.server(), stationDimension(pending.station));
+        if (world == null || !isStation(world.getBlockState(stationPos(pending.station)))) {
+            Msg.send(player, Msg.error("That Flag Designer station is gone."));
+            return true;
+        }
+        ClaimRecord record = core.data().claim(claimId);
+        Claim claim = record == null ? null : FlanBridge.find(core.server(), record);
+        if (record == null || claim == null || !record.hasFlag) {
+            Msg.send(player, Msg.error("That flag does not belong to an active claim."));
+            return true;
+        }
+        core.data().designerStations().put(pending.station, claimId);
+        core.data().markDirty();
+        core.audit("{} linked the Flag Designer at {} to claim {}", player.getGameProfile().getName(), pending.station, claimId);
+        Msg.send(player, Msg.ok("Flag Designer linked to the flag of claim '" + FlanBridge.label(claim) + "' (owner "
+                + FlanBridge.playerName(core.server(), claim.getOwner()) + ")."));
+        return true;
+    }
+
+    /** A station block was removed: forget its link. */
+    public void onBlockRemoved(ServerWorld world, BlockPos pos) {
+        String key = stationKey(FlanBridge.dimensionId(world), pos);
+        if (core.data().designerStations().remove(key) != null) {
+            core.data().markDirty();
+            core.audit("Flag Designer at {} removed; its link was cleared", key);
+        }
+    }
+
+    /** All station links, for /flanwarfare designer list. */
+    public Map<String, UUID> stations() {
+        return core.data().designerStations();
+    }
+
+    // ------------------------------------------------------------------ opening
+
+    private void open(ServerPlayerEntity player, UUID claimId, String station) {
         if (!WarConfig.DESIGNER_ENABLED.get()) {
+            Msg.send(player, Msg.info("The Flag Designer is disabled on this server."));
             return;
         }
         long now = System.currentTimeMillis();
         Long last = lastOpen.get(player.getUniqueID());
-        if (last != null && now - last < 1000L) {
+        if (last != null && now - last < 500L) {
             return;
         }
         lastOpen.put(player.getUniqueID(), now);
         ClaimRecord record = core.data().claim(claimId);
         Claim claim = record == null ? null : FlanBridge.find(core.server(), record);
         if (record == null || claim == null || !record.hasFlag || claim.isAdminClaim()) {
+            if (station != null) {
+                Msg.send(player, Msg.error("The flag this Flag Designer is linked to no longer exists. An admin can link it again."));
+            }
             return;
         }
-        if (!mayEdit(player, claim)) {
-            Msg.send(player, Msg.error("Only the claim owner can edit this flag."));
+        if (!mayUse(player, claim, station != null)) {
+            Msg.send(player, Msg.error(station != null && "MEMBERS".equalsIgnoreCase(WarConfig.DESIGNER_STATION_ACCESS.get())
+                    ? "Only the claim owner and its members can edit this flag." : "Only the claim owner can edit this flag."));
             return;
         }
         if (!available()) {
@@ -173,17 +350,28 @@ public final class FlagDesigner {
                     + "hold a banner, /flag design set, then /flag design apply."));
             return;
         }
-        Session session = new Session(claimId, dimension, record.flagPos(), ThreadLocalRandom.current().nextLong(),
-                now + SESSION_MS);
+        Session session = new Session(claimId, record.dimension, record.flagPos(), ThreadLocalRandom.current().nextLong(),
+                now + SESSION_MS, station);
         sessions.put(player.getUniqueID(), session);
         sendOpen(player, record, claim, session);
     }
 
-    private boolean mayEdit(ServerPlayerEntity player, Claim claim) {
+    /** Who may edit: the owner (plus the admin override); stations follow designer_station_access. */
+    private boolean mayUse(ServerPlayerEntity player, Claim claim, boolean fromStation) {
         if (player.getUniqueID().equals(claim.getOwner())) {
             return true;
         }
-        return WarConfig.DESIGNER_ADMIN_OVERRIDE.get() && player.hasPermissionLevel(Msg.adminLevel());
+        if (WarConfig.DESIGNER_ADMIN_OVERRIDE.get() && isAdmin(player)) {
+            return true;
+        }
+        if (!fromStation) {
+            return false;
+        }
+        String access = WarConfig.DESIGNER_STATION_ACCESS.get();
+        if ("ANYONE".equalsIgnoreCase(access)) {
+            return true;
+        }
+        return "MEMBERS".equalsIgnoreCase(access) && FlanBridge.isMemberAnywhere(claim, player.getUniqueID());
     }
 
     private static Set<String> currentPatterns(ItemStack design) {
@@ -278,10 +466,25 @@ public final class FlagDesigner {
             sendResult(player, false, "The flag was moved. Left-click it again at its new place.");
             return;
         }
-        if (!mayEdit(player, claim)) {
+        if (!mayUse(player, claim, session.station != null)) {
             sessions.remove(player.getUniqueID());
-            sendResult(player, false, "Only the claim owner can edit this flag.");
+            sendResult(player, false, "You are no longer allowed to edit this flag.");
             return;
+        }
+        if (session.station != null) {
+            ServerWorld stationWorld = FlanBridge.world(core.server(), stationDimension(session.station));
+            BlockPos at = stationPos(session.station);
+            if (stationWorld == null || !isStation(stationWorld.getBlockState(at))
+                    || !claimId.equals(core.data().designerStations().get(session.station))) {
+                sessions.remove(player.getUniqueID());
+                sendResult(player, false, "This Flag Designer was removed or relinked.");
+                return;
+            }
+            if (player.world != stationWorld
+                    || player.getDistanceSq(at.getX() + 0.5D, at.getY() + 0.5D, at.getZ() + 0.5D) > STATION_REACH * STATION_REACH) {
+                sendResult(player, false, "Move back to the Flag Designer to save.");
+                return;
+            }
         }
         if (!designerOpen(player)) {
             sendResult(player, false, "The designer is no longer open. Left-click the flag again.");
@@ -330,5 +533,6 @@ public final class FlagDesigner {
     public void onLogout(UUID player) {
         sessions.remove(player);
         lastOpen.remove(player);
+        pendingLinks.remove(player);
     }
 }

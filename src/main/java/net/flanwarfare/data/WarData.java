@@ -47,6 +47,8 @@ public final class WarData {
         Map<UUID, List<MemberNotice>> memberNotices = new HashMap<>();
         Map<UUID, RankRegistry> rankRegistries = new HashMap<>();
         Map<UUID, UUID> mainClaims = new HashMap<>();
+        /** Flag Designer stations: "dimension|blockPosLong" -> linked claim. */
+        Map<String, UUID> designerStations = new HashMap<>();
     }
 
     private static final int MAX_ALERTS_PER_PLAYER = 20;
@@ -104,6 +106,9 @@ public final class WarData {
             }
             if (loaded.mainClaims == null) {
                 loaded.mainClaims = new HashMap<>();
+            }
+            if (loaded.designerStations == null) {
+                loaded.designerStations = new HashMap<>();
             }
             for (RankRegistry registry : loaded.rankRegistries.values()) {
                 registry.repair();
@@ -245,6 +250,11 @@ public final class WarData {
     /** Designated main claim per player (the claim whose rank registry they manage by default). */
     public Map<UUID, UUID> mainClaims() {
         return state.mainClaims;
+    }
+
+    /** Flag Designer stations and the claim each is linked to (live map; mark dirty after changes). */
+    public Map<String, UUID> designerStations() {
+        return state.designerStations;
     }
 
     /** Pending membership notices of an offline player (live list, may be modified). */

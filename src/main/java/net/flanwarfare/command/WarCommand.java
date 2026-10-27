@@ -146,7 +146,58 @@ public final class WarCommand {
     public static void registerRoot(CommandDispatcher<CommandSource> dispatcher) {
         dispatcher.register(Commands.literal("flanwarfare")
                 .requires(src -> src.hasPermissionLevel(Msg.adminLevel()))
-                .then(captureZoneNode()));
+                .then(captureZoneNode())
+                .then(Commands.literal("designer")
+                        .then(Commands.literal("give")
+                                .executes(ctx -> giveStation(ctx, java.util.Collections.singletonList(ctx.getSource().asPlayer())))
+                                .then(Commands.argument("targets", net.minecraft.command.arguments.EntityArgument.players())
+                                        .executes(ctx -> giveStation(ctx,
+                                                net.minecraft.command.arguments.EntityArgument.getPlayers(ctx, "targets")))))
+                        .then(Commands.literal("list").executes(WarCommand::listStations))));
+    }
+
+    /** /flanwarfare designer give [targets]: the only way to obtain a Flag Designer station. */
+    private static int giveStation(CommandContext<CommandSource> ctx,
+                                   java.util.Collection<net.minecraft.entity.player.ServerPlayerEntity> targets) {
+        net.minecraft.item.Item item = net.flanwarfare.flag.FlagDesigner.stationItem();
+        if (item == null) {
+            ctx.getSource().sendErrorMessage(new net.minecraft.util.text.StringTextComponent(
+                    "The Flag Designer block needs Flan Warfare Flags 1.3 or newer on the server."));
+            return 0;
+        }
+        for (net.minecraft.entity.player.ServerPlayerEntity target : targets) {
+            net.minecraft.item.ItemStack stack = new net.minecraft.item.ItemStack(item);
+            if (!target.inventory.addItemStackToInventory(stack)) {
+                target.dropItem(stack, false);
+            }
+        }
+        reply(ctx, "Gave a Flag Designer to " + targets.size() + " player(s). Place it, sneak-right-click it, "
+                + "then right-click a claim flag to link them.");
+        return targets.size();
+    }
+
+    private static int listStations(CommandContext<CommandSource> ctx) {
+        WarCore core = WarCore.ready();
+        if (core == null) {
+            return 0;
+        }
+        java.util.Map<String, java.util.UUID> stations = core.designer().stations();
+        if (stations.isEmpty()) {
+            reply(ctx, "No Flag Designer stations are linked.");
+            return 1;
+        }
+        StringBuilder sb = new StringBuilder("Flag Designer stations (" + stations.size() + "):");
+        for (java.util.Map.Entry<String, java.util.UUID> e : stations.entrySet()) {
+            String key = e.getKey();
+            net.minecraft.util.math.BlockPos pos = net.minecraft.util.math.BlockPos.fromLong(
+                    Long.parseLong(key.substring(key.lastIndexOf('|') + 1)));
+            net.flanwarfare.data.ClaimRecord record = core.data().claim(e.getValue());
+            sb.append("\n  ").append(key, 0, key.lastIndexOf('|')).append(' ')
+                    .append(pos.getX()).append(' ').append(pos.getY()).append(' ').append(pos.getZ())
+                    .append(" -> claim ").append(e.getValue()).append(record == null || !record.hasFlag ? " (flag gone)" : "");
+        }
+        reply(ctx, sb.toString());
+        return stations.size();
     }
 
     private static int showCaptureRadius(CommandContext<CommandSource> ctx) {

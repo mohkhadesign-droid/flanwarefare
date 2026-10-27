@@ -339,10 +339,24 @@ To get the hourglass design from the reference picture, give yourself this banne
 
 ### Flag Designer (with the flags mod)
 
-**Left-click your claim's flag** (the pole, the pedestal or the banner cloth) to open the
-**Flag Design** window. Only the claim's **owner** can open it. Invited members, party members
-and allies get "Only the claim owner can edit this flag." The click never damages or moves
-the flag.
+**Open it from a Flag Designer station.** This is a block that admins hand out and link to a
+claim's flag:
+
+1. An admin runs **`/flanwarfare designer give [player]`**. There is no recipe, it isn't in
+   the creative menu, it can't be mined in survival, it drops nothing and pistons can't move
+   it.
+2. The admin places it, **sneak-right-clicks** it, then **right-clicks the claim's flag**
+   within 60 s. The link is saved and survives restarts. It follows the claim, so `/flag move`
+   keeps it working.
+   - Sneak-right-clicking the station twice unlinks it.
+   - **`/flanwarfare designer list`** shows every station and its linked claim.
+3. Players **right-click the station** to open the designer for the linked flag.
+   - By default only the claim's owner can use it. `designer_station_access` can be set to
+     `OWNER`, `MEMBERS` or `ANYONE`.
+   - Saving applies the design to the linked flag at once. Cancel discards the changes.
+
+Left-clicking the flag itself no longer opens the designer, unless you turn on
+`designer_open_on_flag_left_click`.
 
 - **3D preview (left).** The real flag model (upper pole, crossbar, finial and banner), drawn
   with the same renderer as the world.
@@ -391,6 +405,9 @@ inventory key close without saving.
 **Config** (`flags` section):
 - `designer_enabled`: default true.
 - `designer_admin_override`: lets operators edit any claim's flag. Default false.
+- `designer_station_access`: who may use a station: `OWNER` (default), `MEMBERS` or `ANYONE`.
+- `designer_open_on_flag_left_click`: also open the designer from the flag itself. Default
+  false.
 
 Without the flags mod (1.1 or newer), left-clicking a flag tells the owner to use
 `/flag design`.
@@ -429,7 +446,7 @@ Without the flags mod (1.1 or newer), left-clicking a flag tells the owner to us
 | `/flag design set` | Save the banner in your main hand as your design. The banner is not consumed. |
 | `/flag design apply` | Show your saved design on the flag of the claim you stand in. |
 | `/flag design reset` | Go back to the default banner. |
-| *(left-click your flag)* | Open the Flag Designer. Owner only, and needs the flags mod. |
+| *(right-click a Flag Designer station)* | Open the Flag Designer for the station's linked flag. |
 | `/war status` | Whether a raid is active and when the next change happens. |
 | `/war capture` | Captures on your claims or within 64 blocks. |
 | `/war alerts on` / `off` | Unmute or mute live raid alerts for yourself. |
