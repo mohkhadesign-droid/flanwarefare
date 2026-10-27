@@ -326,7 +326,7 @@ public final class FlagDesigner {
         ContainerType<?> type = designerType();
         String label = DesignRules.clip(FlanBridge.label(claim), 64); // the client reads at most 64 characters
         NetworkHooks.openGui(player,
-                new SimpleNamedContainerProvider((windowId, inventory, p) -> type.create(windowId, inventory),
+                new SimpleNamedContainerProvider((windowId, inventory, p) -> type.create(windowId, inventory, null), // 3-arg Forge method: exists on dedicated servers (the 2-arg one is client-only)
                         new StringTextComponent("Flag Design")),
                 buf -> {
                     buf.writeUniqueId(session.claimId);
