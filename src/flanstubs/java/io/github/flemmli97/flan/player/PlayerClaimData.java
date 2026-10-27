@@ -20,6 +20,10 @@ public class PlayerClaimData {
         throw new UnsupportedOperationException("stub");
     }
 
+    public EnumEditMode getEditMode() {
+        throw new UnsupportedOperationException("stub");
+    }
+
     public boolean isAdminIgnoreClaim() {
         throw new UnsupportedOperationException("stub");
     }
