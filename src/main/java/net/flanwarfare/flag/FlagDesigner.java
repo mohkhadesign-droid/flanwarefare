@@ -48,13 +48,14 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Server side of the Flag Designer (the screen itself is in the Flan Warfare Flags client mod).
+ * Server side of the Flag Designer (the block, menu and screen are in the separate, optional
+ * Flan Warfare Designer mod, {@code flanwarfaredesigner}).
  *
  * <ol>
- *   <li>Left-click on any block of a claim's flag (pole, model column or banner): the click is
- *   cancelled (never mines or breaks anything) and, if the clicker owns that claim in Flan
- *   (or is an operator with {@code flags.designer_admin_override}), the server opens the
- *   Flags mod's container {@code flanwarfareflags:designer} (a real menu with the Banner
+ *   <li>Right-click on a Flag Designer block: the server finds the claim the block stands in
+ *   and, if the clicker may edit that claim's flag ({@code designer_station_access}; the owner
+ *   by default, or an operator with {@code flags.designer_admin_override}), opens the
+ *   Designer mod's container {@code flanwarfaredesigner:designer} (a real menu with the Banner
  *   Pattern Item slot) and sends the claim, a one-time edit token and the current design as
  *   its extra data.</li>
  *   <li>Save Flag: the client sends the design on {@code flanwarfare:designer}. Everything is
@@ -70,15 +71,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * </ol>
  */
 public final class FlagDesigner {
-    private static final ResourceLocation TO_CLIENT = new ResourceLocation("flanwarfareflags", "designer");
+    private static final ResourceLocation TO_CLIENT = new ResourceLocation("flanwarfaredesigner", "designer");
     private static final ResourceLocation TO_SERVER = new ResourceLocation(FlanWarfare.MOD_ID, "designer");
-    private static final ResourceLocation CONTAINER_ID = new ResourceLocation("flanwarfareflags", "designer");
+    private static final ResourceLocation CONTAINER_ID = new ResourceLocation("flanwarfaredesigner", "designer");
     private static final long SESSION_MS = 15 * 60 * 1000L;
     private static final int MAX_WIRE_LAYERS = 16;
     private static EventNetworkChannel channel;
 
-    private static final ResourceLocation STATION_ID = new ResourceLocation("flanwarfareflags", "flag_designer");
-    private static final long LINK_MS = 60 * 1000L;
+    private static final ResourceLocation STATION_ID = new ResourceLocation("flanwarfaredesigner", "flag_designer");
     /** Saving from a station needs the player within this distance of it (blocks). */
     private static final double STATION_REACH = 8.0D;
 
@@ -101,21 +101,9 @@ public final class FlagDesigner {
         }
     }
 
-    /** An admin's pending "link this station" step: the next flag they click gets linked. */
-    private static final class PendingLink {
-        final String station;
-        final long expires;
-
-        PendingLink(String station, long expires) {
-            this.station = station;
-            this.expires = expires;
-        }
-    }
-
     private final WarCore core;
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final Map<UUID, Long> lastOpen = new HashMap<>();
-    private final Map<UUID, PendingLink> pendingLinks = new HashMap<>();
 
     public FlagDesigner(WarCore core) {
         this.core = core;
@@ -131,15 +119,15 @@ public final class FlagDesigner {
     }
 
     public static boolean available() {
-        return ModList.get().isLoaded("flanwarfareflags") && designerType() != null;
+        return ModList.get().isLoaded("flanwarfaredesigner") && designerType() != null;
     }
 
-    /** The Flags mod's designer menu type (null if the Flags mod is missing or older than 1.1). */
+    /** The Designer mod's menu type (null if Flan Warfare Designer is not installed). */
     static ContainerType<?> designerType() {
         return ForgeRegistries.CONTAINERS.getValue(CONTAINER_ID);
     }
 
-    /** The Flag Designer station item (null if the Flags mod is missing or older than 1.3). */
+    /** The Flag Designer item (null if Flan Warfare Designer is not installed). */
     public static Item stationItem() {
         Item item = ForgeRegistries.ITEMS.getValue(STATION_ID);
         return item == null || item == net.minecraft.item.Items.AIR ? null : item;
@@ -186,25 +174,17 @@ public final class FlagDesigner {
     // ------------------------------------------------------------------ clicks
 
     /**
-     * Left-click on a flag block: links a pending station (admin), or opens the designer when
-     * {@code designer_open_on_flag_left_click} is on. Otherwise the click is left alone (the
+     * Left-click on a flag block opens the designer only when
+     * {@code designer_open_on_flag_left_click} is on; otherwise the click is left alone (the
      * flag is protected by the normal break rules, as before the designer existed).
      */
     public void onLeftClick(PlayerInteractEvent.LeftClickBlock event) {
-        if (!(event.getPlayer() instanceof ServerPlayerEntity)) {
+        if (!(event.getPlayer() instanceof ServerPlayerEntity) || !WarConfig.DESIGNER_LEFT_CLICK.get()) {
             return;
         }
         ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
-        String dimension = FlanBridge.dimensionId(player.world);
-        UUID claimId = core.flags().claimOfFlagBlock(dimension, event.getPos());
+        UUID claimId = core.flags().claimOfFlagBlock(FlanBridge.dimensionId(player.world), event.getPos());
         if (claimId == null) {
-            return;
-        }
-        if (completeLink(player, claimId)) {
-            event.setCanceled(true);
-            return;
-        }
-        if (!WarConfig.DESIGNER_LEFT_CLICK.get()) {
             return;
         }
         event.setCanceled(true); // never mine or break any part of a flag by clicking it
@@ -212,9 +192,8 @@ public final class FlagDesigner {
     }
 
     /**
-     * Right-click: on a Flag Designer station it opens the designer for the linked flag (or,
-     * for an admin sneaking, starts linking/unlinking). On a flag block it completes an admin's
-     * pending link. Everything else is left alone.
+     * Right-click on a Flag Designer block opens the designer for the flag of the claim the
+     * block stands in. Everything else is left alone.
      */
     public void onRightClick(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getPlayer() instanceof ServerPlayerEntity)) {
@@ -222,19 +201,16 @@ public final class FlagDesigner {
         }
         ServerPlayerEntity player = (ServerPlayerEntity) event.getPlayer();
         BlockPos pos = event.getPos();
-        String dimension = FlanBridge.dimensionId(player.world);
-        if (isStation(player.world.getBlockState(pos))) {
-            event.setCanceled(true);
-            event.setCancellationResult(ActionResultType.SUCCESS);
-            if (event.getHand() == Hand.MAIN_HAND) {
-                useStation(player, stationKey(dimension, pos));
-            }
+        if (!isStation(player.world.getBlockState(pos))) {
             return;
         }
-        UUID claimId = core.flags().claimOfFlagBlock(dimension, pos);
-        if (claimId != null && event.getHand() == Hand.MAIN_HAND && completeLink(player, claimId)) {
-            event.setCanceled(true);
-            event.setCancellationResult(ActionResultType.SUCCESS);
+        if (player.isSneaking() && !player.getHeldItem(event.getHand()).isEmpty()) {
+            return; // sneaking with an item: let the player place blocks against it as usual
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(ActionResultType.SUCCESS);
+        if (event.getHand() == Hand.MAIN_HAND) {
+            useStation(player, player.getServerWorld(), pos);
         }
     }
 
@@ -242,81 +218,36 @@ public final class FlagDesigner {
         return player.hasPermissionLevel(Msg.adminLevel());
     }
 
-    private void useStation(ServerPlayerEntity player, String key) {
-        UUID id = player.getUniqueID();
-        long now = System.currentTimeMillis();
-        if (player.isSneaking() && isAdmin(player)) {
-            PendingLink pending = pendingLinks.get(id);
-            if (pending != null && pending.station.equals(key) && now < pending.expires) {
-                pendingLinks.remove(id);
-                if (core.data().designerStations().remove(key) != null) {
-                    core.data().markDirty();
-                    core.audit("{} unlinked the Flag Designer at {}", player.getGameProfile().getName(), key);
-                    Msg.send(player, Msg.ok("This Flag Designer is now unlinked."));
-                } else {
-                    Msg.send(player, Msg.info("This Flag Designer was not linked. Linking cancelled."));
-                }
-                return;
+    /** The claim (parent) a designer block stands in, if it has a conquest flag; else null with a message. */
+    private ClaimRecord stationClaim(ServerPlayerEntity player, ServerWorld world, BlockPos pos, boolean tell) {
+        Claim claim = FlanBridge.parentAt(world, pos);
+        if (claim == null) {
+            if (tell) {
+                Msg.send(player, Msg.info("Place the Flag Designer inside your claim: it designs the flag of the claim it stands in."));
             }
-            pendingLinks.put(id, new PendingLink(key, now + LINK_MS));
-            UUID current = core.data().designerStations().get(key);
-            ClaimRecord linked = current == null ? null : core.data().claim(current);
-            Msg.send(player, Msg.info((linked != null ? "Currently linked to claim " + current + ". " : "Not linked yet. ")
-                    + "Now right-click the claim flag to link this Flag Designer to it (60 s). "
-                    + "Sneak-right-click this station again to unlink it."));
-            return;
+            return null;
         }
-        UUID claimId = core.data().designerStations().get(key);
-        if (claimId == null) {
-            Msg.send(player, Msg.info("This Flag Designer is not linked to a flag yet. An admin links it: sneak-right-click "
-                    + "the station, then right-click a claim flag."));
-            return;
+        if (claim.isAdminClaim() || core.isExcluded(claim)) {
+            if (tell) {
+                Msg.send(player, Msg.info("This claim has no conquest flag to design."));
+            }
+            return null;
         }
-        open(player, claimId, key);
+        ClaimRecord record = core.lifecycle().recordFor(claim);
+        if (record == null || !record.hasFlag) {
+            if (tell) {
+                Msg.send(player, Msg.info("This claim has no flag yet. Place it first with /flag place."));
+            }
+            return null;
+        }
+        return record;
     }
 
-    /** Finishes an admin's pending link if there is one. Returns true if the click was used. */
-    private boolean completeLink(ServerPlayerEntity player, UUID claimId) {
-        PendingLink pending = pendingLinks.get(player.getUniqueID());
-        if (pending == null) {
-            return false;
+    private void useStation(ServerPlayerEntity player, ServerWorld world, BlockPos pos) {
+        ClaimRecord record = stationClaim(player, world, pos, true);
+        if (record != null) {
+            open(player, record.claimId, stationKey(FlanBridge.dimensionId(world), pos));
         }
-        pendingLinks.remove(player.getUniqueID());
-        if (System.currentTimeMillis() > pending.expires || !isAdmin(player)) {
-            Msg.send(player, Msg.info("Linking timed out. Sneak-right-click the station again."));
-            return true;
-        }
-        ServerWorld world = FlanBridge.world(core.server(), stationDimension(pending.station));
-        if (world == null || !isStation(world.getBlockState(stationPos(pending.station)))) {
-            Msg.send(player, Msg.error("That Flag Designer station is gone."));
-            return true;
-        }
-        ClaimRecord record = core.data().claim(claimId);
-        Claim claim = record == null ? null : FlanBridge.find(core.server(), record);
-        if (record == null || claim == null || !record.hasFlag) {
-            Msg.send(player, Msg.error("That flag does not belong to an active claim."));
-            return true;
-        }
-        core.data().designerStations().put(pending.station, claimId);
-        core.data().markDirty();
-        core.audit("{} linked the Flag Designer at {} to claim {}", player.getGameProfile().getName(), pending.station, claimId);
-        Msg.send(player, Msg.ok("Flag Designer linked to the flag of claim '" + FlanBridge.label(claim) + "' (owner "
-                + FlanBridge.playerName(core.server(), claim.getOwner()) + ")."));
-        return true;
-    }
-
-    /** A station block was removed: forget its link. */
-    public void onBlockRemoved(ServerWorld world, BlockPos pos) {
-        String key = stationKey(FlanBridge.dimensionId(world), pos);
-        if (core.data().designerStations().remove(key) != null) {
-            core.data().markDirty();
-            core.audit("Flag Designer at {} removed; its link was cleared", key);
-        }
-    }
-
-    /** All station links, for /flanwarfare designer list. */
-    public Map<String, UUID> stations() {
-        return core.data().designerStations();
     }
 
     // ------------------------------------------------------------------ opening
@@ -474,10 +405,11 @@ public final class FlagDesigner {
         if (session.station != null) {
             ServerWorld stationWorld = FlanBridge.world(core.server(), stationDimension(session.station));
             BlockPos at = stationPos(session.station);
-            if (stationWorld == null || !isStation(stationWorld.getBlockState(at))
-                    || !claimId.equals(core.data().designerStations().get(session.station))) {
+            ClaimRecord here = stationWorld == null || !isStation(stationWorld.getBlockState(at)) ? null
+                    : stationClaim(player, stationWorld, at, false);
+            if (here == null || !claimId.equals(here.claimId)) {
                 sessions.remove(player.getUniqueID());
-                sendResult(player, false, "This Flag Designer was removed or relinked.");
+                sendResult(player, false, "This Flag Designer was removed, or its claim changed.");
                 return;
             }
             if (player.world != stationWorld
@@ -533,6 +465,5 @@ public final class FlagDesigner {
     public void onLogout(UUID player) {
         sessions.remove(player);
         lastOpen.remove(player);
-        pendingLinks.remove(player);
     }
 }

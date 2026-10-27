@@ -60,7 +60,8 @@ public final class FlagRenderer extends TileEntityRenderer<FlagTileEntity> {
     public FlagRenderer(TileEntityRendererDispatcher dispatcher) {
         super(dispatcher);
         // Same geometry as the vanilla banner flag (20 x 40 x 1 model pixels, 64 x 64 texture).
-        fabric = newFabric();
+        fabric = new ModelRenderer(64, 64, 0, 0);
+        fabric.addBox(-10.0F, 0.0F, -2.0F, 20.0F, 40.0F, 1.0F, 0.0F);
     }
 
     @Override
@@ -79,57 +80,43 @@ public final class FlagRenderer extends TileEntityRenderer<FlagTileEntity> {
         stack.rotate(Vector3f.YP.rotationDegrees(-facing.getHorizontalAngle()));
         stack.translate(-0.5D, 0.0D, -0.5D);
 
-        float raise = te.animatedRaise();
-        float top = FABRIC_TOP_LOWEST + (FABRIC_TOP - FABRIC_TOP_LOWEST) * raise;
-        drawStructure(stack, buffers, light, overlay, 0.0F, raise >= 0.999F);
-        drawFabric(stack, buffers, light, overlay, fabric, top, te.patternLayers());
-        stack.pop();
-    }
-
-    /** The vanilla banner flag geometry (20 x 40 x 1 model px, 64 x 64 texture). */
-    static ModelRenderer newFabric() {
-        ModelRenderer m = new ModelRenderer(64, 64, 0, 0);
-        m.addBox(-10.0F, 0.0F, -2.0F, 20.0F, 40.0F, 1.0F, 0.0F);
-        return m;
-    }
-
-    /**
-     * Pedestal (if {@code fromY} is 0), pole from {@code fromY} px up, crossbar, caps, finial and,
-     * with {@code tabs}, the cloth tabs. Shared by the world renderer and the designer preview.
-     */
-    static void drawStructure(MatrixStack stack, IRenderTypeBuffer buffers, int light, int overlay, float fromY, boolean tabs) {
         IVertexBuilder vb = buffers.getBuffer(RenderType.getEntityCutoutNoCull(PARTS));
         Matrix4f pose = stack.getLast().getMatrix();
         Matrix3f normal = stack.getLast().getNormal();
-        if (fromY <= 0.0F) {
-            box(vb, pose, normal, light, overlay, 0, 0, 0, 16, 2, 16, STONE, STONE_TOP);
-            box(vb, pose, normal, light, overlay, 4, 2, 4, 12, 6, 12, STONE, STONE_TOP);
-        }
-        box(vb, pose, normal, light, overlay, 7, Math.max(6.0F, fromY), 7, 9, 94, 9, WOOD, WOOD);
+
+        // Pedestal
+        box(vb, pose, normal, light, overlay, 0, 0, 0, 16, 2, 16, STONE, STONE_TOP);
+        box(vb, pose, normal, light, overlay, 4, 2, 4, 12, 6, 12, STONE, STONE_TOP);
+        // Pole
+        box(vb, pose, normal, light, overlay, 7, 6, 7, 9, 94, 9, WOOD, WOOD);
+        // Crossbar, end caps and attachment tabs (dark wood)
         box(vb, pose, normal, light, overlay, -2, 90, 7, 18, 92.5F, 10.6F, DARK, DARK);
         box(vb, pose, normal, light, overlay, -2.5F, 89.5F, 6.5F, 0.5F, 93, 11, DARK, DARK);
         box(vb, pose, normal, light, overlay, 15.5F, 89.5F, 6.5F, 18.5F, 93, 11, DARK, DARK);
+        // Gold finial
         box(vb, pose, normal, light, overlay, 6, 94, 6, 10, 97, 10, GOLD, GOLD_TOP);
         box(vb, pose, normal, light, overlay, 7, 97, 7, 9, 99, 9, GOLD, GOLD_TOP);
-        if (tabs) {
+
+        float raise = te.animatedRaise();
+        float top = FABRIC_TOP_LOWEST + (FABRIC_TOP - FABRIC_TOP_LOWEST) * raise;
+        if (raise >= 0.999F) {
+            // Tabs only connect when the banner hangs from the crossbar.
             for (int i = 0; i < 4; i++) {
                 float x = 1.25F + i * 4.0F;
                 box(vb, pose, normal, light, overlay, x, 88, 10.1F, x + 1.5F, 90, 10.6F, DARK, DARK);
             }
         }
-    }
 
-    /** The banner cloth (vanilla pattern renderer), its top edge at {@code topPx}. */
-    static void drawFabric(MatrixStack stack, IRenderTypeBuffer buffers, int light, int overlay, ModelRenderer fabric,
-                           float topPx, java.util.List<com.mojang.datafixers.util.Pair<net.minecraft.tileentity.BannerPattern,
-                           net.minecraft.item.DyeColor>> layers) {
+        // Fabric: vanilla banner flag model scaled 0.8 -> 16 x 32 px, back face at z = 9.3 px.
         stack.push();
-        stack.translate(8.0D / 16.0D, (topPx - 25.6D) / 16.0D, 8.5D / 16.0D);
+        stack.translate(8.0D / 16.0D, (top - 25.6D) / 16.0D, 8.5D / 16.0D);
         stack.scale(0.8F, -0.8F, -0.8F);
         fabric.rotationPointY = -32.0F;
         fabric.rotateAngleX = 0.0F;
         BannerTileEntityRenderer.func_230180_a_(stack, buffers, light, overlay, fabric, ModelBakery.LOCATION_BANNER_BASE,
-                true, layers);
+                true, te.patternLayers());
+        stack.pop();
+
         stack.pop();
     }
 

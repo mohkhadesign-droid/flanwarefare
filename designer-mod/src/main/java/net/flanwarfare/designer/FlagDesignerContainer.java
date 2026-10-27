@@ -1,4 +1,4 @@
-package net.flanwarfare.flags;
+package net.flanwarfare.designer;
 
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
@@ -31,7 +31,7 @@ import java.util.UUID;
  * save, death, disconnect). If the inventory is full it drops at the player's feet, as vanilla
  * does for crafting grids.
  *
- * <p>Flan Warfare (server) opens this container by registry name and sends the opening data
+ * <p>Flan Warfare (server) opens this container ({@code flanwarfaredesigner:designer}) by registry name and sends the opening data
  * (claim, token, current design) as the container's extra data. On a dedicated server the
  * data is null; the server keeps its own session.
  */
@@ -65,7 +65,7 @@ public final class FlagDesignerContainer extends Container {
     private final OpenData data;
 
     public FlagDesignerContainer(int windowId, PlayerInventory playerInventory, PacketBuffer extra) {
-        super(FlagsMod.DESIGNER_CONTAINER.get(), windowId);
+        super(DesignerMod.DESIGNER_CONTAINER.get(), windowId);
         addSlot(new Slot(patternInventory, 0, PATTERN_SLOT_X, PATTERN_SLOT_Y) {
             @Override
             public boolean isItemValid(ItemStack stack) {

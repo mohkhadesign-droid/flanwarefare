@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "flanwarfaredesigner:block/flag_designer_top",
+    "side": "flanwarfaredesigner:block/flag_designer_side",
+    "bottom": "flanwarfaredesigner:block/flag_designer_bottom"
+  }
+}
