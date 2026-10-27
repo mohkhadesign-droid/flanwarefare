@@ -22,46 +22,15 @@ jobs:
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
-      - name: Probe A
+      - name: Probe E
         if: always()
         run: |
           J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
-          for c in net.minecraft.client.gui.screen.Screen net.minecraft.client.gui.screen.inventory.ContainerScreen; do
-            javap -p -cp "$J" $c 2>&1 | grep "(" | grep -v "lambda\$" | grep -E "." | sed 's/^ *//' | cut -c1-200 > p.txt || true
-            split -l 25 p.txt part_
-            for f in part_*; do echo "::warning title=$c::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
-            rm -f part_*
-          done
-      - name: Probe B
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
-          for c in net.minecraft.inventory.container.Container; do
-            javap -p -cp "$J" $c 2>&1 | grep "(" | grep -v "lambda\$" | grep -E "." | sed 's/^ *//' | cut -c1-200 > p.txt || true
-            split -l 25 p.txt part_
-            for f in part_*; do echo "::warning title=$c::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
-            rm -f part_*
-          done
-      - name: Probe C
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
-          for c in net.minecraft.inventory.container.Slot net.minecraft.inventory.container.ContainerType net.minecraftforge.common.extensions.IForgeContainerType net.minecraftforge.fml.network.NetworkHooks net.minecraft.client.gui.ScreenManager; do
-            javap -p -cp "$J" $c 2>&1 | grep "(" | grep -v "lambda\$" | grep -E "." | sed 's/^ *//' | cut -c1-200 > p.txt || true
-            split -l 25 p.txt part_
-            for f in part_*; do echo "::warning title=$c::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
-            rm -f part_*
-          done
-      - name: Probe D
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
-          javap -p -c -cp "$J" net.minecraft.tileentity.BannerPattern | grep -E "^  public|getfield" | grep -B1 getfield | head -30 > q.txt
-          javap -p -cp "$J" net.minecraft.client.multiplayer.PlayerController | grep -iE "click|window" >> q.txt
-          javap -p -cp "$J" net.minecraft.inventory.container.SimpleNamedContainerProvider | grep "(" >> q.txt
-          javap -p -cp "$J" net.minecraft.client.gui.AbstractGui | grep -iE "blit|fill|gradient" >> q.txt
+          javap -p -c -cp "$J" net.minecraft.tileentity.BannerPattern > bp.txt
+          grep -A14 "BannerPattern(java.lang.String, int, java.lang.String, java.lang.String, boolean);" bp.txt > q.txt
+          grep -A12 "static {};" bp.txt >> q.txt
           split -l 25 q.txt part_
-          for f in part_*; do echo "::warning title=D::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
+          for f in part_*; do echo "::warning title=E::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
       - name: Report compile errors as annotations
         if: failure()
         run: |
