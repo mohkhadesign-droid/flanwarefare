@@ -161,7 +161,7 @@ public final class WarEvents {
         WarCore core = WarCore.ready();
         if (core != null && event.getPlayer() instanceof ServerPlayerEntity) {
             core.rankDisplay().onLogout((ServerPlayerEntity) event.getPlayer());
-            core.designer().onLogout(event.getPlayer().getUniqueID());
+            core.designer().onLogout((ServerPlayerEntity) event.getPlayer());
         }
     }
 

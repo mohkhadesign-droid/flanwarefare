@@ -344,42 +344,56 @@ To get the hourglass design from the reference picture, give yourself this banne
 and allies get "Only the claim owner can edit this flag." The click never damages or moves
 the flag.
 
-- **Left:** a 3D preview of the real flag model (upper pole, crossbar, finial and banner),
-  drawn with the same renderer as the world.
-  - It turns slowly, once every 15 s.
+- **3D preview (left).** The real flag model (upper pole, crossbar, finial and banner), drawn
+  with the same renderer as the world.
+  - It turns once every 15 s.
   - **Drag** it to turn and tilt it, and **scroll** to zoom.
-  - **Double-click** it or press **R** to reset the view.
-- **Top right:** the 16 dye colours. The selected one has a white border.
-- **Middle:** all vanilla banner patterns. Hovering shows the name in the selected colour,
-  e.g. "White Bend".
-- **Banner Pattern Item row:** creeper, skull, flower, Mojang, globe and piglin patterns. Each
-  is usable while you carry its banner pattern item, or if your flag already has it.
-- **Layers row:** the base and up to 6 pattern layers, in the order they are applied.
-  - Click a slot to select it, and click it again to deselect.
-  - With the **base** selected, a colour click changes the base colour.
-  - With a **layer** selected, a colour click recolours it and a pattern click replaces its
-    pattern. ◀ ▶ move it and X (or Delete) removes it.
-  - With **nothing** selected, a pattern click adds a new layer in the selected colour.
-- **Ctrl+Z / Ctrl+Y** undo and redo.
+  - The **reset** button, a double-click or **R** restores the view.
+- **1. Choose Color.** The 16 dyes in two rows.
+  - Use the **Base** and **Pattern** tabs to choose what a colour click changes: the base
+    colour, or the dye for new pattern layers.
+  - The selected colour has a white border.
+- **2. Select Pattern.** Every banner pattern that needs no item, including patterns added by
+  other installed mods.
+  - The grid is a fixed 8 × 3 window. Scroll it with the wheel or the scrollbar.
+  - Icons show the pattern in the selected dye, and hovering shows its name (e.g. "White
+    Bend").
+  - A click adds a new layer, or replaces the selected layer's pattern.
+- **Banner Pattern Item slot.** This is a real inventory slot.
+  - Click it to put in a banner pattern item you carry: Creeper Charge, Skull Charge, Flower
+    Charge, Thing, Globe, Snout, or one from a mod. If you carry several, a list appears.
+  - Click the arrow box underneath to add that pattern.
+  - Click the slot again to take the item back.
+  - **The item is never consumed**, as with the loom. It returns to your inventory when the
+    window closes for any reason, and drops at your feet if your inventory is full.
+- **3. Pattern Layers.** The **Base** slot sits apart from the six layer slots, which show the
+  layers in the order they are drawn.
+  - Click a layer to select it.
+  - **Move Up** draws it over the next layer, **Move Down** under the previous one, and
+    **Remove** (or Delete) removes it.
+  - **Ctrl+Z / Ctrl+Y** undo and redo.
 
-Nothing changes in the world until you click **Save Flag**. **Cancel** and **Escape** throw
-the edit away.
+Nothing changes in the world until you click **Save Flag**. **Cancel**, **Escape** and the
+inventory key close without saving.
 
 **What saving does:**
 - The server checks again that you still own the claim, that the flag is still in the same
   place, and that the design is valid.
+- A pattern that needs an item must have that item in the slot (the server checks its own copy
+  of the slot), unless the flag already had that pattern.
 - The banner then changes for everyone at once and stays through restarts, chunk reloads and
   `/flag move`.
-- Only that claim's flag changes, even if you own several claims.
-- During a capture attempt, the design is saved and shows when the attempt ends. This is the
-  same as `/flag design apply`.
-- If saving fails, the reason appears in red and your edit stays open.
+- Only that claim's flag changes.
+- During a capture attempt, the design is saved and shows when the attempt ends.
+- If saving fails, the reason appears in red and your edit stays open. The window closes only
+  after the server confirms.
 
 **Config** (`flags` section):
 - `designer_enabled`: default true.
 - `designer_admin_override`: lets operators edit any claim's flag. Default false.
 
-Without the flags mod, left-clicking a flag tells the owner to use `/flag design`.
+Without the flags mod (1.1 or newer), left-clicking a flag tells the owner to use
+`/flag design`.
 
 ### Sides and defenders
 
