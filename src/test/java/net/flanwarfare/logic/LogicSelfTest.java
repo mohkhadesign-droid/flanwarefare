@@ -630,21 +630,45 @@ public final class LogicSelfTest {
     }
 
     private static void designRules() {
-        java.util.List<String> known = java.util.Arrays.asList("b", "bs", "cr", "bo", "tt", "bt", "mc", "cre", "moj");
+        java.util.List<String> known = java.util.Arrays.asList("b", "bs", "cr", "bo", "tt", "bt", "mc", "cre", "moj",
+                "diagonal_mod_pattern", "modded_item_pattern");
         java.util.List<String> none = java.util.Collections.emptyList();
+        java.util.List<String> modItem = java.util.Arrays.asList("modded_item_pattern");
         check(DesignRules.check(14, java.util.Arrays.asList("tt", "bt", "mc", "bo"), java.util.Arrays.asList(4, 4, 15, 14),
-                known, none) == null, "reference design accepted");
-        check(DesignRules.check(16, none, java.util.Collections.<Integer>emptyList(), known, none) != null, "base colour 16 refused");
-        check(DesignRules.check(0, java.util.Arrays.asList("cr"), java.util.Arrays.asList(-1), known, none) != null, "dye -1 refused");
-        check(DesignRules.check(0, java.util.Arrays.asList("xyz"), java.util.Arrays.asList(1), known, none) != null, "unknown pattern refused");
-        check(DesignRules.check(0, java.util.Arrays.asList("b"), java.util.Arrays.asList(1), known, none) != null, "base as a layer refused");
+                known, none, none) == null, "reference design accepted");
+        check(DesignRules.check(3, none, java.util.Collections.<Integer>emptyList(), known, none, none) == null,
+                "no patterns accepted");
+        check(DesignRules.check(16, none, java.util.Collections.<Integer>emptyList(), known, none, none) != null, "base colour 16 refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr"), java.util.Arrays.asList(-1), known, none, none) != null, "dye -1 refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("xyz"), java.util.Arrays.asList(1), known, none, none) != null, "unknown pattern refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("b"), java.util.Arrays.asList(1), known, none, none) != null, "base as a layer refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr", "cr", "cr", "cr", "cr", "cr"),
+                java.util.Arrays.asList(1, 2, 3, 4, 5, 6), known, none, none) == null, "6 layers accepted");
         check(DesignRules.check(0, java.util.Arrays.asList("cr", "cr", "cr", "cr", "cr", "cr", "cr"),
-                java.util.Arrays.asList(1, 1, 1, 1, 1, 1, 1), known, none) != null, "7 layers refused");
-        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known, none) != null,
+                java.util.Arrays.asList(1, 1, 1, 1, 1, 1, 1), known, none, none) != null, "7 layers refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known, none, none) != null,
                 "item pattern without item refused");
-        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known,
+        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known, none,
                 java.util.Arrays.asList("cre")) == null, "item pattern with item accepted");
-        check(DesignRules.check(0, java.util.Arrays.asList("cr", "bo"), java.util.Arrays.asList(1), known, none) != null,
-                "mismatched lists refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr"), java.util.Arrays.asList(1, 2), known, none, none) != null,
+                "size mismatch refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("diagonal_mod_pattern"), java.util.Arrays.asList(5), known, none, none) == null,
+                "long (17+ char) modded pattern id accepted");
+        check(DesignRules.check(0, java.util.Arrays.asList("modded_item_pattern"), java.util.Arrays.asList(5), known, modItem, none) != null,
+                "modded item pattern without item refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("modded_item_pattern"), java.util.Arrays.asList(5), known, modItem, modItem) == null,
+                "modded item pattern with item accepted");
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 65; i++) {
+            huge.append('x');
+        }
+        java.util.List<String> knownHuge = new java.util.ArrayList<>(known);
+        knownHuge.add(huge.toString());
+        check(DesignRules.check(0, java.util.Arrays.asList(huge.toString()), java.util.Arrays.asList(1), knownHuge, none, none) != null,
+                "65-char id refused");
+        eq("abc", DesignRules.clip("abcdef", 3), "clip");
+        eq("ab", DesignRules.clip("ab", 3), "clip short");
+        eq("a", DesignRules.clip("a\uD83D\uDE00b", 2), "clip keeps surrogate pairs whole");
+        eq("", DesignRules.clip(null, 3), "clip null");
     }
 }

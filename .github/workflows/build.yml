@@ -22,14 +22,15 @@ jobs:
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
-      - name: Probe E
+      - name: Probe F
         if: always()
         run: |
           J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
-          javap -p -c -cp "$J" net.minecraft.tileentity.BannerPattern > bp.txt || true
-          grep -nE "BannerPattern\(java|putfield|static \{\}" bp.txt | head -12 > q.txt || true
-          awk '/static \{\}/{f=1} f' bp.txt | grep -E "ldc|String" | head -8 >> q.txt || true
-          echo "::warning title=E::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' q.txt)"
+          javap -p -cp "$J" net.minecraft.tileentity.BannerPattern | grep "(" | grep -v lambda > q.txt || true
+          javap -p -cp "$J" net.minecraft.client.renderer.Atlases | grep -iE "banner|shield" >> q.txt || true
+          javap -p -cp "$J" net.minecraft.entity.player.ServerPlayerEntity | grep -iE "close" >> q.txt || true
+          split -l 25 q.txt part_
+          for f in part_*; do echo "::warning title=F::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
       - name: Report compile errors as annotations
         if: failure()
         run: |

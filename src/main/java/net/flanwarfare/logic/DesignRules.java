@@ -21,6 +21,14 @@ public final class DesignRules {
     public static final List<String> ITEM_PATTERNS = Collections.unmodifiableList(
             Arrays.asList("cre", "sku", "flo", "moj", "glb", "pig"));
 
+    /**
+     * Longest pattern id accepted on the wire, in characters. Vanilla ids are 1 to 3
+     * characters ("bs", "cre"), but mods register patterns through Forge with free-form ids
+     * that are often longer than 16 (for example "modname_pattern_name"). The client writes and
+     * the server reads with this same limit; anything longer is refused, never truncated.
+     */
+    public static final int MAX_ID_LENGTH = 64;
+
     /** The base layer id; never a selectable pattern. */
     public static final String BASE = "b";
 
@@ -30,12 +38,15 @@ public final class DesignRules {
      * @param baseColor   dye id of the base (0..15)
      * @param hashes      pattern ids, bottom to top
      * @param colors      dye id per pattern
-     * @param known       every valid pattern id of this Minecraft version
-     * @param unlocked    item-locked pattern ids the player may use (carries the item, or the
-     *                    flag already had that pattern before this edit)
+     * @param known       every valid pattern id of this game (vanilla plus installed mods)
+     * @param itemLocked  pattern ids that need a banner pattern item (vanilla's six plus every
+     *                    pattern that some installed mod's banner pattern item applies)
+     * @param unlocked    item-locked pattern ids the player may use (the item is in the
+     *                    designer's Banner Pattern Item slot, or the flag already had that
+     *                    pattern before this edit)
      */
     public static String check(int baseColor, List<String> hashes, List<Integer> colors, Collection<String> known,
-                               Collection<String> unlocked) {
+                               Collection<String> itemLocked, Collection<String> unlocked) {
         if (baseColor < 0 || baseColor > 15) {
             return "Invalid base colour.";
         }
@@ -48,16 +59,35 @@ public final class DesignRules {
         for (int i = 0; i < hashes.size(); i++) {
             String h = hashes.get(i);
             int c = colors.get(i);
-            if (h == null || BASE.equals(h) || !known.contains(h)) {
+            if (h == null || h.length() > MAX_ID_LENGTH || BASE.equals(h) || !known.contains(h)) {
                 return "Unknown banner pattern.";
             }
             if (c < 0 || c > 15) {
                 return "Invalid dye colour.";
             }
-            if (ITEM_PATTERNS.contains(h) && !unlocked.contains(h)) {
-                return "That pattern needs its banner pattern item in your inventory.";
+            if ((ITEM_PATTERNS.contains(h) || itemLocked.contains(h)) && !unlocked.contains(h)) {
+                return "That pattern needs its banner pattern item in the Banner Pattern Item slot.";
             }
         }
         return null;
+    }
+
+    /**
+     * Shortens text to at most {@code maxChars} UTF-16 characters for a network string, never
+     * splitting a surrogate pair. {@code PacketBuffer.readString(n)} refuses more than n
+     * characters, so the writer clips with the same n.
+     */
+    public static String clip(String text, int maxChars) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        int end = maxChars;
+        if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
+            end--;
+        }
+        return text.substring(0, end);
     }
 }

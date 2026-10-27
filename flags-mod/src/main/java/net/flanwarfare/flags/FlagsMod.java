@@ -1,8 +1,10 @@
 package net.flanwarfare.flags;
 
 import net.minecraft.block.Block;
+import net.minecraft.inventory.container.ContainerType;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.common.extensions.IForgeContainerType;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.RegistryObject;
@@ -28,10 +30,16 @@ public final class FlagsMod {
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
     public static final DeferredRegister<TileEntityType<?>> TILES = DeferredRegister.create(ForgeRegistries.TILE_ENTITIES, MOD_ID);
 
+    public static final DeferredRegister<ContainerType<?>> CONTAINERS = DeferredRegister.create(ForgeRegistries.CONTAINERS, MOD_ID);
+
     public static final RegistryObject<FlagBlock> FLAG = BLOCKS.register("flag", FlagBlock::new);
     @SuppressWarnings("ConstantConditions")
     public static final RegistryObject<TileEntityType<FlagTileEntity>> FLAG_TILE = TILES.register("flag",
             () -> TileEntityType.Builder.create(FlagTileEntity::new, FLAG.get()).build(null));
+
+    /** The Flag Designer menu (opened by Flan Warfare by this registry name: flanwarfareflags:designer). */
+    public static final RegistryObject<ContainerType<FlagDesignerContainer>> DESIGNER_CONTAINER = CONTAINERS.register("designer",
+            () -> IForgeContainerType.create(FlagDesignerContainer::new));
 
     /**
      * Capture HUD data from Flan Warfare (server). Registered on both sides so the Forge
@@ -41,7 +49,7 @@ public final class FlagsMod {
             net.minecraftforge.fml.network.NetworkRegistry.newEventChannel(
                     new net.minecraft.util.ResourceLocation(MOD_ID, "hud"), () -> "1", v -> true, v -> true);
 
-    /** Flag Designer: server -> client (open the editor with a claim's design, save results). */
+    /** Flag Designer: server -> client save results (opening goes through the container). */
     public static final net.minecraftforge.fml.network.event.EventNetworkChannel DESIGNER_CHANNEL =
             net.minecraftforge.fml.network.NetworkRegistry.newEventChannel(
                     new net.minecraft.util.ResourceLocation(MOD_ID, "designer"), () -> "1", v -> true, v -> true);
@@ -50,6 +58,7 @@ public final class FlagsMod {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         BLOCKS.register(bus);
         TILES.register(bus);
+        CONTAINERS.register(bus);
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> net.flanwarfare.flags.client.ClientSetup.init(bus));
     }
 }

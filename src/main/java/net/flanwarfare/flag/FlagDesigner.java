@@ -2,6 +2,13 @@ package net.flanwarfare.flag;
 
 import io.github.flemmli97.flan.claim.Claim;
 import io.netty.buffer.Unpooled;
+import net.minecraft.inventory.container.Container;
+import net.minecraft.inventory.container.ContainerType;
+import net.minecraft.inventory.container.SimpleNamedContainerProvider;
+import net.minecraft.item.Item;
+import net.minecraft.util.text.StringTextComponent;
+import net.minecraftforge.fml.network.NetworkHooks;
+import net.minecraftforge.registries.ForgeRegistries;
 import net.flanwarfare.FlanWarfare;
 import net.flanwarfare.config.WarConfig;
 import net.flanwarfare.core.WarCore;
@@ -42,13 +49,16 @@ import java.util.concurrent.ThreadLocalRandom;
  * <ol>
  *   <li>Left-click on any block of a claim's flag (pole, model column or banner): the click is
  *   cancelled (never mines or breaks anything) and, if the clicker owns that claim in Flan
- *   (or is an operator with {@code flags.designer_admin_override}), the client gets an
- *   <i>open</i> message on {@code flanwarfareflags:designer} with the claim's current design,
- *   the item-locked patterns the player may use, and a one-time edit token.</li>
+ *   (or is an operator with {@code flags.designer_admin_override}), the server opens the
+ *   Flags mod's container {@code flanwarfareflags:designer} (a real menu with the Banner
+ *   Pattern Item slot) and sends the claim, a one-time edit token and the current design as
+ *   its extra data.</li>
  *   <li>Save Flag: the client sends the design on {@code flanwarfare:designer}. Everything is
  *   re-checked on the server: the token, that the same claim still exists, that its flag is
  *   still at the same place, that the sender still owns it, and every colour, pattern id, the
- *   layer limit and item-locked patterns ({@link DesignRules}). Only then is the claim's own
+ *   layer limit and item-locked patterns ({@link DesignRules}): an item-locked pattern needs
+ *   its banner pattern item in the open designer's slot <i>on the server</i>, or must already
+ *   be on this flag. Only then is the claim's own
  *   flag design replaced, through the normal flag path (so the world banner, the model and the
  *   capture HUD all update for everyone nearby, and it persists like any flag design).</li>
  *   <li>The client gets a result message: success closes the designer, failure keeps the
@@ -58,7 +68,9 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class FlagDesigner {
     private static final ResourceLocation TO_CLIENT = new ResourceLocation("flanwarfareflags", "designer");
     private static final ResourceLocation TO_SERVER = new ResourceLocation(FlanWarfare.MOD_ID, "designer");
+    private static final ResourceLocation CONTAINER_ID = new ResourceLocation("flanwarfareflags", "designer");
     private static final long SESSION_MS = 15 * 60 * 1000L;
+    private static final int MAX_WIRE_LAYERS = 16;
     private static EventNetworkChannel channel;
 
     private static final class Session {
@@ -95,7 +107,33 @@ public final class FlagDesigner {
     }
 
     public static boolean available() {
-        return ModList.get().isLoaded("flanwarfareflags");
+        return ModList.get().isLoaded("flanwarfareflags") && designerType() != null;
+    }
+
+    /** The Flags mod's designer menu type (null if the Flags mod is missing or older than 1.1). */
+    static ContainerType<?> designerType() {
+        return ForgeRegistries.CONTAINERS.getValue(CONTAINER_ID);
+    }
+
+    /** True if this player has the designer menu open right now (server view). */
+    private static boolean designerOpen(ServerPlayerEntity player) {
+        ContainerType<?> type = designerType();
+        Container open = player.openContainer;
+        return type != null && open != null && open != player.container && open.getType() == type;
+    }
+
+    /**
+     * Every pattern that needs a banner pattern item: the patterns applied by any registered
+     * {@link BannerPatternItem} (vanilla's six and those of installed mods). Pattern id -> item.
+     */
+    public static Map<String, Item> itemLockedPatterns() {
+        Map<String, Item> map = new HashMap<>();
+        for (Item item : ForgeRegistries.ITEMS) {
+            if (item instanceof BannerPatternItem) {
+                map.putIfAbsent(((BannerPatternItem) item).getBannerPattern().getHashname(), item);
+            }
+        }
+        return map;
     }
 
     // ------------------------------------------------------------------ opening
@@ -131,8 +169,8 @@ public final class FlagDesigner {
             return;
         }
         if (!available()) {
-            Msg.send(player, Msg.info("The Flag Designer needs the Flan Warfare Flags mod. Meanwhile: hold a banner, "
-                    + "/flag design set, then /flag design apply."));
+            Msg.send(player, Msg.info("The Flag Designer needs the Flan Warfare Flags mod (1.1 or newer). Meanwhile: "
+                    + "hold a banner, /flag design set, then /flag design apply."));
             return;
         }
         Session session = new Session(claimId, dimension, record.flagPos(), ThreadLocalRandom.current().nextLong(),
@@ -146,18 +184,6 @@ public final class FlagDesigner {
             return true;
         }
         return WarConfig.DESIGNER_ADMIN_OVERRIDE.get() && player.hasPermissionLevel(Msg.adminLevel());
-    }
-
-    /** Item-locked pattern ids the player may use: from items they carry. */
-    private static Set<String> carriedItemPatterns(ServerPlayerEntity player) {
-        Set<String> set = new HashSet<>();
-        for (int i = 0; i < player.inventory.getSizeInventory(); i++) {
-            ItemStack stack = player.inventory.getStackInSlot(i);
-            if (stack.getItem() instanceof BannerPatternItem) {
-                set.add(((BannerPatternItem) stack.getItem()).getBannerPattern().getHashname());
-            }
-        }
-        return set;
     }
 
     private static Set<String> currentPatterns(ItemStack design) {
@@ -174,32 +200,29 @@ public final class FlagDesigner {
 
     private void sendOpen(ServerPlayerEntity player, ClaimRecord record, Claim claim, Session session) {
         ItemStack design = BannerDesigns.fromSnbt(record.designSnbt);
-        Set<String> unlocked = carriedItemPatterns(player);
-        unlocked.addAll(currentPatterns(design));
-        unlocked.retainAll(DesignRules.ITEM_PATTERNS);
         CompoundNBT data = new CompoundNBT();
         data.putInt("Base", BannerDesigns.color(design).getId());
         CompoundNBT entity = design.getChildTag("BlockEntityTag");
         data.put("Patterns", entity != null && entity.contains("Patterns", 9) ? entity.getList("Patterns", 10).copy() : new ListNBT());
-        PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
-        buf.writeByte(0);
-        buf.writeUniqueId(session.claimId);
-        buf.writeLong(session.token);
-        buf.writeString(FlanBridge.label(claim), 64);
-        buf.writeCompoundTag(data);
-        buf.writeVarInt(unlocked.size());
-        for (String h : unlocked) {
-            buf.writeString(h, 16);
-        }
-        buf.writeVarInt(DesignRules.MAX_LAYERS);
-        player.connection.sendPacket(new SCustomPayloadPlayPacket(TO_CLIENT, buf));
+        ContainerType<?> type = designerType();
+        String label = DesignRules.clip(FlanBridge.label(claim), 64); // the client reads at most 64 characters
+        NetworkHooks.openGui(player,
+                new SimpleNamedContainerProvider((windowId, inventory, p) -> type.create(windowId, inventory),
+                        new StringTextComponent("Flag Design")),
+                buf -> {
+                    buf.writeUniqueId(session.claimId);
+                    buf.writeLong(session.token);
+                    buf.writeString(label);
+                    buf.writeCompoundTag(data);
+                    buf.writeVarInt(DesignRules.MAX_LAYERS);
+                });
     }
 
     private static void sendResult(ServerPlayerEntity player, boolean ok, String message) {
         PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
         buf.writeByte(1);
         buf.writeBoolean(ok);
-        buf.writeString(message, 256);
+        buf.writeString(DesignRules.clip(message, 256)); // the client reads at most 256 characters
         player.connection.sendPacket(new SCustomPayloadPlayPacket(TO_CLIENT, buf));
     }
 
@@ -214,13 +237,13 @@ public final class FlagDesigner {
             long token = buf.readLong();
             int base = buf.readVarInt();
             int count = buf.readVarInt();
-            if (count < 0 || count > 16) {
+            if (count < 0 || count > MAX_WIRE_LAYERS) {
                 throw new IllegalArgumentException("layer count " + count);
             }
             List<String> hashes = new ArrayList<>();
             List<Integer> colors = new ArrayList<>();
             for (int i = 0; i < count; i++) {
-                hashes.add(buf.readString(16));
+                hashes.add(buf.readString(DesignRules.MAX_ID_LENGTH)); // same limit the client writes with
                 colors.add(buf.readVarInt());
             }
             ctx.enqueueWork(() -> {
@@ -260,13 +283,20 @@ public final class FlagDesigner {
             sendResult(player, false, "Only the claim owner can edit this flag.");
             return;
         }
+        if (!designerOpen(player)) {
+            sendResult(player, false, "The designer is no longer open. Left-click the flag again.");
+            return;
+        }
         Set<String> known = new HashSet<>();
         for (BannerPattern p : BannerPattern.values()) {
             known.add(p.getHashname());
         }
-        Set<String> unlocked = carriedItemPatterns(player);
-        unlocked.addAll(currentPatterns(BannerDesigns.fromSnbt(record.designSnbt)));
-        String problem = DesignRules.check(base, hashes, colors, known, unlocked);
+        Set<String> unlocked = currentPatterns(BannerDesigns.fromSnbt(record.designSnbt));
+        ItemStack slotItem = player.openContainer.getSlot(0).getStack(); // server-side inventory, not the client's word
+        if (slotItem.getItem() instanceof BannerPatternItem) {
+            unlocked.add(((BannerPatternItem) slotItem.getItem()).getBannerPattern().getHashname());
+        }
+        String problem = DesignRules.check(base, hashes, colors, known, itemLockedPatterns().keySet(), unlocked);
         if (problem != null) {
             sendResult(player, false, problem);
             return;
@@ -287,6 +317,14 @@ public final class FlagDesigner {
         core.audit("{} saved a new flag design for claim {} ({} layers)", player.getGameProfile().getName(), claimId,
                 hashes.size());
         sendResult(player, true, visible ? "Flag design saved." : "Flag design saved. It will show once the current capture attempt ends.");
+    }
+
+    /** Before the player data is saved on logout: closing returns the slot's pattern item. */
+    public void onLogout(ServerPlayerEntity player) {
+        if (designerOpen(player)) {
+            player.closeContainer();
+        }
+        onLogout(player.getUniqueID());
     }
 
     public void onLogout(UUID player) {
