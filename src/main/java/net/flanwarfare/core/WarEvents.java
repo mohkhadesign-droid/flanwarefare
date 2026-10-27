@@ -161,6 +161,16 @@ public final class WarEvents {
         WarCore core = WarCore.ready();
         if (core != null && event.getPlayer() instanceof ServerPlayerEntity) {
             core.rankDisplay().onLogout((ServerPlayerEntity) event.getPlayer());
+            core.designer().onLogout(event.getPlayer().getUniqueID());
+        }
+    }
+
+    /** Left-click on a flag: never mines it; opens the Flag Designer for the claim owner. */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onLeftClickBlock(net.minecraftforge.event.entity.player.PlayerInteractEvent.LeftClickBlock event) {
+        WarCore core = WarCore.ready();
+        if (core != null && !event.getWorld().isRemote()) {
+            core.designer().onLeftClick(event);
         }
     }
 

@@ -48,6 +48,7 @@ public final class LogicSelfTest {
         rankColors();
         rankRules();
         hudPerspectives();
+        designRules();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -626,5 +627,24 @@ public final class LogicSelfTest {
         eq(0, HudView.fill(-1, 120), "fill clamped low");
         eq(120, HudView.fill(2, 120), "fill clamped high");
         check(HudView.trendOf(CaptureModel.Status.IDLE) == HudView.Trend.DECREASING, "idle with progress decays");
+    }
+
+    private static void designRules() {
+        java.util.List<String> known = java.util.Arrays.asList("b", "bs", "cr", "bo", "tt", "bt", "mc", "cre", "moj");
+        java.util.List<String> none = java.util.Collections.emptyList();
+        check(DesignRules.check(14, java.util.Arrays.asList("tt", "bt", "mc", "bo"), java.util.Arrays.asList(4, 4, 15, 14),
+                known, none) == null, "reference design accepted");
+        check(DesignRules.check(16, none, java.util.Collections.<Integer>emptyList(), known, none) != null, "base colour 16 refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr"), java.util.Arrays.asList(-1), known, none) != null, "dye -1 refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("xyz"), java.util.Arrays.asList(1), known, none) != null, "unknown pattern refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("b"), java.util.Arrays.asList(1), known, none) != null, "base as a layer refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr", "cr", "cr", "cr", "cr", "cr", "cr"),
+                java.util.Arrays.asList(1, 1, 1, 1, 1, 1, 1), known, none) != null, "7 layers refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known, none) != null,
+                "item pattern without item refused");
+        check(DesignRules.check(0, java.util.Arrays.asList("cre"), java.util.Arrays.asList(1), known,
+                java.util.Arrays.asList("cre")) == null, "item pattern with item accepted");
+        check(DesignRules.check(0, java.util.Arrays.asList("cr", "bo"), java.util.Arrays.asList(1), known, none) != null,
+                "mismatched lists refused");
     }
 }

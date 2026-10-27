@@ -75,6 +75,8 @@ public final class WarConfig {
     public static final ForgeConfigSpec.IntValue MOVEMENT_COOLDOWN_SECONDS;
     public static final ForgeConfigSpec.IntValue MIN_FLAG_DISTANCE;
     public static final ForgeConfigSpec.ConfigValue<String> DEFAULT_BANNER_COLOR;
+    public static final ForgeConfigSpec.BooleanValue DESIGNER_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue DESIGNER_ADMIN_OVERRIDE;
     public static final ForgeConfigSpec.ConfigValue<String> RESTORE_SUPPORT_BLOCK;
     public static final ForgeConfigSpec.IntValue RESTORE_CHECK_SECONDS;
     public static final ForgeConfigSpec.BooleanValue PROTECT_FLAGS;
@@ -303,6 +305,11 @@ public final class WarConfig {
                 .defineInRange("movement_cooldown_seconds", 300, 0, 86400 * 7);
         MIN_FLAG_DISTANCE = b.comment("Minimum distance between two registered flags, in blocks (7 keeps 3-block capture zones apart).")
                 .defineInRange("min_flag_distance", 7, 2, 64);
+        DESIGNER_ENABLED = b.comment("Left-clicking a claim's flag opens the Flag Designer for the claim owner",
+                        "(needs the Flan Warfare Flags mod on server and clients).")
+                .define("designer_enabled", true);
+        DESIGNER_ADMIN_OVERRIDE = b.comment("Operators (admin permission level) may open and save the designer of any claim's flag.")
+                .define("designer_admin_override", false);
         DEFAULT_BANNER_COLOR = b.comment("Banner colour used when a player has no saved design.")
                 .define("default_banner_color", "white");
         RESTORE_SUPPORT_BLOCK = b.comment("Block placed under a flag during restoration if its support vanished.")

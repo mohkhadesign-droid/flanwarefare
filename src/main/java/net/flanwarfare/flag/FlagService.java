@@ -70,6 +70,8 @@ public final class FlagService {
     private final WarCore core;
     private final Map<String, Map<Long, Role>> roleIndex = new HashMap<>();
     private final Map<String, Map<Long, UUID>> flagIndex = new HashMap<>();
+    /** Every block of every flag (pole, model column, banner slots) -> its claim. */
+    private final Map<String, Map<Long, UUID>> flagBlockIndex = new HashMap<>();
     private final Map<UUID, Visual> visuals = new HashMap<>();
     private final java.util.Set<UUID> conversionChecked = new java.util.HashSet<>();
 
@@ -82,6 +84,7 @@ public final class FlagService {
     public void rebuildIndex() {
         roleIndex.clear();
         flagIndex.clear();
+        flagBlockIndex.clear();
         if (core.data() == null) {
             return;
         }
@@ -98,8 +101,10 @@ public final class FlagService {
                     }
                 }
             }
+            Map<Long, UUID> blocks = flagBlockIndex.computeIfAbsent(record.dimension, d -> new HashMap<>());
             for (BlockPos pos : s.allBlocks()) {
                 roles.put(pos.toLong(), Role.FLAG);
+                blocks.put(pos.toLong(), record.claimId);
             }
             roles.put(s.support().toLong(), Role.SUPPORT);
             flagIndex.computeIfAbsent(record.dimension, d -> new HashMap<>()).put(s.base.toLong(), record.claimId);
@@ -130,6 +135,27 @@ public final class FlagService {
         }
         Role role = roleAt(world, pos);
         return role == Role.FLAG || role == Role.SUPPORT;
+    }
+
+    /** The claim whose flag occupies this block (any part of it), or null. */
+    public UUID claimOfFlagBlock(String dimension, BlockPos pos) {
+        Map<Long, UUID> blocks = flagBlockIndex.get(dimension);
+        return blocks == null ? null : blocks.get(pos.toLong());
+    }
+
+    /**
+     * Sets one claim's flag design (the Flag Designer's Save). Only this claim's flag changes;
+     * a running capture animation keeps showing until it ends, as with /flag design apply.
+     * Returns true if the new design is visible right away.
+     */
+    public boolean setClaimDesign(ClaimRecord record, String snbt) {
+        record.designSnbt = snbt;
+        core.data().markDirty();
+        if (visuals.containsKey(record.claimId)) {
+            return false;
+        }
+        showDesign(record);
+        return true;
     }
 
     public UUID claimOfFlagAt(String dimension, BlockPos pos) {

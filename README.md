@@ -337,6 +337,50 @@ To get the hourglass design from the reference picture, give yourself this banne
 `/flag design set` and `/flag design apply`:
 `/give @s black_banner{BlockEntityTag:{Patterns:[{Pattern:"tt",Color:4},{Pattern:"bt",Color:4},{Pattern:"mc",Color:15},{Pattern:"bo",Color:14}]}}`
 
+### Flag Designer (with the flags mod)
+
+**Left-click your claim's flag** (the pole, the pedestal or the banner cloth) to open the
+**Flag Design** window. Only the claim's **owner** can open it. Invited members, party members
+and allies get "Only the claim owner can edit this flag." The click never damages or moves
+the flag.
+
+- **Left:** a 3D preview of the real flag model (upper pole, crossbar, finial and banner),
+  drawn with the same renderer as the world.
+  - It turns slowly, once every 15 s.
+  - **Drag** it to turn and tilt it, and **scroll** to zoom.
+  - **Double-click** it or press **R** to reset the view.
+- **Top right:** the 16 dye colours. The selected one has a white border.
+- **Middle:** all vanilla banner patterns. Hovering shows the name in the selected colour,
+  e.g. "White Bend".
+- **Banner Pattern Item row:** creeper, skull, flower, Mojang, globe and piglin patterns. Each
+  is usable while you carry its banner pattern item, or if your flag already has it.
+- **Layers row:** the base and up to 6 pattern layers, in the order they are applied.
+  - Click a slot to select it, and click it again to deselect.
+  - With the **base** selected, a colour click changes the base colour.
+  - With a **layer** selected, a colour click recolours it and a pattern click replaces its
+    pattern. ◀ ▶ move it and X (or Delete) removes it.
+  - With **nothing** selected, a pattern click adds a new layer in the selected colour.
+- **Ctrl+Z / Ctrl+Y** undo and redo.
+
+Nothing changes in the world until you click **Save Flag**. **Cancel** and **Escape** throw
+the edit away.
+
+**What saving does:**
+- The server checks again that you still own the claim, that the flag is still in the same
+  place, and that the design is valid.
+- The banner then changes for everyone at once and stays through restarts, chunk reloads and
+  `/flag move`.
+- Only that claim's flag changes, even if you own several claims.
+- During a capture attempt, the design is saved and shows when the attempt ends. This is the
+  same as `/flag design apply`.
+- If saving fails, the reason appears in red and your edit stays open.
+
+**Config** (`flags` section):
+- `designer_enabled`: default true.
+- `designer_admin_override`: lets operators edit any claim's flag. Default false.
+
+Without the flags mod, left-clicking a flag tells the owner to use `/flag design`.
+
 ### Sides and defenders
 
 - **Attacking side:** your FTB Teams team. Party members cooperate; players without a party
@@ -371,6 +415,7 @@ To get the hourglass design from the reference picture, give yourself this banne
 | `/flag design set` | Save the banner in your main hand as your design. The banner is not consumed. |
 | `/flag design apply` | Show your saved design on the flag of the claim you stand in. |
 | `/flag design reset` | Go back to the default banner. |
+| *(left-click your flag)* | Open the Flag Designer. Owner only, and needs the flags mod. |
 | `/war status` | Whether a raid is active and when the next change happens. |
 | `/war capture` | Captures on your claims or within 64 blocks. |
 | `/war alerts on` / `off` | Unmute or mute live raid alerts for yourself. |

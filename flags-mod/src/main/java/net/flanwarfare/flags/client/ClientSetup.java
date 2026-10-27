@@ -16,5 +16,6 @@ public final class ClientSetup {
         CaptureHudClient hud = new CaptureHudClient();
         FlagsMod.HUD_CHANNEL.addListener(hud::onPayload);
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(hud);
+        FlagsMod.DESIGNER_CHANNEL.addListener(DesignerClient::onPayload);
     }
 }

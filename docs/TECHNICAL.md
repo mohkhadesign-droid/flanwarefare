@@ -827,3 +827,73 @@ Capture rules, speed, contest and decay are unchanged.
   always sees it.
 - **Overlap warning:** `WarConfig.validate` warns when `min_flag_distance` is below twice the
   radius, because zones of nearby flags then overlap.
+
+## 25. Flag Designer
+
+### Opening (server, `flag/FlagDesigner.java`)
+- **Index.** `FlagService.rebuildIndex()` also fills `flagBlockIndex` (dimension → block pos
+  → claim). It lists every block of every flag: the model column or the fence pole, plus the
+  banner slots. `claimOfFlagBlock(dim, pos)` answers in O(1).
+- **Click handling.** `WarEvents.onLeftClickBlock` (priority HIGH, server side) calls
+  `FlagDesigner.onLeftClick`. If the block belongs to a flag, the event is **always
+  cancelled**, so the click can't start breaking or move anything. The vanilla
+  "may not interact" reply resets the client's block state, and this works in creative mode
+  too. Opens are throttled to one per second per player.
+- **Selection box.** In the flags mod, `FlagBlock.getShape` adds a thin plate over the raised
+  banner (parts 3–5, oriented by facing). `getCollisionShape` stays the pedestal and pole, so
+  the cloth can be clicked but never blocks movement.
+- **Authority.** `mayEdit` = `player == claim.getOwner()` (the Flan owner, read live), or an
+  admin when `flags.designer_admin_override` is on (default off). Flan members, FTB parties
+  and allies are never authorised.
+- **Session.** On success the server stores
+  `Session{claimId, dimension, flagPos, random 64-bit token, expires = now + 15 min}`, one per
+  player. It then sends type 0 on `flanwarfareflags:designer` with: claimId, token, label,
+  {Base, Patterns}, the unlocked item patterns, and max layers (6).
+
+### Client (`flags-mod/client/FlagDesignerScreen.java`)
+- **Working copy.** The screen edits a `Design` (base + layer list). Undo and redo are stacks
+  of copies, capped at 64.
+- **No world access.** No packets are sent while editing, and nothing in the world is touched.
+- **Icons** are banner `ItemStack`s cached by content, so textures aren't rebuilt each frame.
+- **Tooltips** use the vanilla keys `block.minecraft.banner.<file>.<colour>`.
+- **3D preview.** Each frame it pushes a matrix with this transform: translate to the box
+  centre at z 300, scale (s, −s, s) as vanilla GUI items do, rotate pitch then yaw, and centre
+  the model on y 70 px. It then calls `FlagRenderer.drawStructure(from y 40)` and
+  `FlagRenderer.drawFabric`, the same static code the world tile entity renderer uses. Fabric
+  goes through vanilla `BannerTileEntityRenderer` patterns, so it is accurate on both sides.
+- **Preview drawing details:**
+  - full-bright light;
+  - `setupGui3DDiffuseLighting`;
+  - drawn into the shared buffer source and flushed;
+  - clipped with a GL scissor scaled by the window's GUI scale factor, so it is correct at
+    every GUI scale.
+- **Preview camera:**
+  - auto-yaw 24°/s (15 s per turn), paused while dragging and for 2.5 s after any
+    interaction;
+  - pitch clamped −30..50°;
+  - zoom clamped 0.6..2.4.
+
+### Saving (`CCustomPayloadPacket` on `flanwarfare:designer`)
+- **Packet:** claimId, token, base varint, count (≤16 on the wire), then (hash ≤16 chars,
+  colour varint) per layer. Anything malformed is logged and dropped.
+- **Server thread.** Work is queued there with `enqueueWork`.
+- **Checks, in order:**
+  1. The session exists, its claimId and token match, and it hasn't expired.
+  2. The record and the live Flan claim exist, and the claim still has a flag.
+  3. The flag's dimension and position are unchanged. A moved flag fails, and the player
+     must left-click again.
+  4. `mayEdit` passes, checked again.
+  5. `DesignRules.check` passes: base colour 0..15, matching list sizes, at most 6 layers,
+     every hash a known non-base `BannerPattern`, colours 0..15, and item patterns only if
+     carried now or already on this flag.
+- **Result.** The banner `ItemStack` is built, then
+  `FlagService.setClaimDesign(record, snbt)` sets `ClaimRecord.designSnbt` (persisted in the
+  world data like before, and carried by `/flag move`), marks the data dirty and redraws the
+  flag through the normal path. That is a tile entity data update for the model, or banner
+  blocks otherwise, so nearby clients get vanilla block updates. During a capture animation
+  the design waits until the animation ends.
+- **Reply.** Type 1 (ok, message). The client closes on ok. Otherwise it shows the message and
+  keeps the edit.
+
+### Pure logic
+`logic/DesignRules` is covered by `LogicSelfTest.designRules()`, 9 checks.
