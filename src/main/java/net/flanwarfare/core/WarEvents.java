@@ -79,6 +79,11 @@ public final class WarEvents {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public void onBreak(BlockEvent.BreakEvent event) {
         protection.onBreak(event);
+        WarCore core = WarCore.ready();
+        if (core != null && !event.isCanceled() && event.getWorld() instanceof net.minecraft.world.server.ServerWorld
+                && new net.minecraft.util.ResourceLocation("flanwarfareflags", "flag_designer").equals(event.getState().getBlock().getRegistryName())) {
+            core.designer().onBlockRemoved((net.minecraft.world.server.ServerWorld) event.getWorld(), event.getPos());
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -171,6 +176,15 @@ public final class WarEvents {
         WarCore core = WarCore.ready();
         if (core != null && !event.getWorld().isRemote()) {
             core.designer().onLeftClick(event);
+        }
+    }
+
+    /** Flag Designer stations and admin flag linking. HIGHEST so claim mods do not block the station. */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onRightClickBlock(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        WarCore core = WarCore.ready();
+        if (core != null && !event.getWorld().isRemote()) {
+            core.designer().onRightClick(event);
         }
     }
 

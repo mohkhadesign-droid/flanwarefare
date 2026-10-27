@@ -2,6 +2,9 @@ package net.flanwarfare.flags;
 
 import net.minecraft.block.Block;
 import net.minecraft.inventory.container.ContainerType;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.Rarity;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.extensions.IForgeContainerType;
@@ -30,9 +33,15 @@ public final class FlagsMod {
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
     public static final DeferredRegister<TileEntityType<?>> TILES = DeferredRegister.create(ForgeRegistries.TILE_ENTITIES, MOD_ID);
 
+    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
     public static final DeferredRegister<ContainerType<?>> CONTAINERS = DeferredRegister.create(ForgeRegistries.CONTAINERS, MOD_ID);
 
     public static final RegistryObject<FlagBlock> FLAG = BLOCKS.register("flag", FlagBlock::new);
+
+    /** The Flag Designer station. Admin-only item: no recipe, no creative tab, no drops. */
+    public static final RegistryObject<FlagDesignerBlock> FLAG_DESIGNER = BLOCKS.register("flag_designer", FlagDesignerBlock::new);
+    public static final RegistryObject<Item> FLAG_DESIGNER_ITEM = ITEMS.register("flag_designer",
+            () -> new BlockItem(FLAG_DESIGNER.get(), new Item.Properties().rarity(Rarity.EPIC)));
     @SuppressWarnings("ConstantConditions")
     public static final RegistryObject<TileEntityType<FlagTileEntity>> FLAG_TILE = TILES.register("flag",
             () -> TileEntityType.Builder.create(FlagTileEntity::new, FLAG.get()).build(null));
@@ -58,6 +67,7 @@ public final class FlagsMod {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         BLOCKS.register(bus);
         TILES.register(bus);
+        ITEMS.register(bus);
         CONTAINERS.register(bus);
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> net.flanwarfare.flags.client.ClientSetup.init(bus));
     }

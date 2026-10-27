@@ -1,1 +1,4 @@
-{ "block.flanwarfareflags.flag": "Claim Flag" }
+{
+  "block.flanwarfareflags.flag": "Claim Flag",
+  "block.flanwarfareflags.flag_designer": "Flag Designer"
+}
