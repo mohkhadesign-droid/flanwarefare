@@ -830,70 +830,99 @@ Capture rules, speed, contest and decay are unchanged.
 
 ## 25. Flag Designer
 
-### Opening (server, `flag/FlagDesigner.java`)
-- **Index.** `FlagService.rebuildIndex()` also fills `flagBlockIndex` (dimension → block pos
-  → claim). It lists every block of every flag: the model column or the fence pole, plus the
-  banner slots. `claimOfFlagBlock(dim, pos)` answers in O(1).
-- **Click handling.** `WarEvents.onLeftClickBlock` (priority HIGH, server side) calls
-  `FlagDesigner.onLeftClick`. If the block belongs to a flag, the event is **always
-  cancelled**, so the click can't start breaking or move anything. The vanilla
-  "may not interact" reply resets the client's block state, and this works in creative mode
-  too. Opens are throttled to one per second per player.
-- **Selection box.** In the flags mod, `FlagBlock.getShape` adds a thin plate over the raised
-  banner (parts 3–5, oriented by facing). `getCollisionShape` stays the pedestal and pole, so
-  the cloth can be clicked but never blocks movement.
-- **Authority.** `mayEdit` = `player == claim.getOwner()` (the Flan owner, read live), or an
-  admin when `flags.designer_admin_override` is on (default off). Flan members, FTB parties
-  and allies are never authorised.
-- **Session.** On success the server stores
-  `Session{claimId, dimension, flagPos, random 64-bit token, expires = now + 15 min}`, one per
-  player. It then sends type 0 on `flanwarfareflags:designer` with: claimId, token, label,
-  {Base, Patterns}, the unlocked item patterns, and max layers (6).
+### 25.1 Fixes in Flan Warfare 1.2.1 / Flags 1.2.0 (root causes)
 
-### Client (`flags-mod/client/FlagDesignerScreen.java`)
-- **Working copy.** The screen edits a `Design` (base + layer list). Undo and redo are stacks
-  of copies, capped at 64.
-- **No world access.** No packets are sent while editing, and nothing in the world is touched.
-- **Icons** are banner `ItemStack`s cached by content, so textures aren't rebuilt each frame.
-- **Tooltips** use the vanilla keys `block.minecraft.banner.<file>.<colour>`.
-- **3D preview.** Each frame it pushes a matrix with this transform: translate to the box
-  centre at z 300, scale (s, −s, s) as vanilla GUI items do, rotate pitch then yaw, and centre
-  the model on y 70 px. It then calls `FlagRenderer.drawStructure(from y 40)` and
-  `FlagRenderer.drawFabric`, the same static code the world tile entity renderer uses. Fabric
-  goes through vanilla `BannerTileEntityRenderer` patterns, so it is accurate on both sides.
-- **Preview drawing details:**
-  - full-bright light;
-  - `setupGui3DDiffuseLighting`;
-  - drawn into the shared buffer source and flushed;
-  - clipped with a GL scissor scaled by the window's GUI scale factor, so it is correct at
-    every GUI scale.
-- **Preview camera:**
-  - auto-yaw 24°/s (15 s per turn), paused while dragging and for 2.5 s after any
-    interaction;
-  - pitch clamped −30..50°;
-  - zoom clamped 0.6..2.4.
+| Symptom | Root cause | Fix |
+|---|---|---|
+| Save Flag crash "String too big (was 17 bytes encoded, max 16)" in `mouseClicked` | `DesignerClient.sendSave` wrote each layer's pattern id with `writeString(id, 16)`. Vanilla ids are 1–3 characters (checked in the 1.16.5 bytecode: `BASE("base","b")`), but mods register patterns through Forge's `BannerPattern.create` with free-form ids, and one used in your pack is 17 bytes. The encoder threw on the client thread, inside the click handler. | Limit `DesignRules.MAX_ID_LENGTH = 64` characters, written and read with the same rule on both sides (`readString(64)` on the server). The client checks every id first and shows an error instead of throwing. The server still accepts only ids of patterns registered in the game. Ids stay as strings, not numbers, because enum ordinals can differ when mods add patterns, while the NBT id is what the banner itself stores. |
+| Cancel did nothing (and could not close) | The button called `Screen.onClose()`, which in these mappings is the lifecycle hook run *after* a screen is replaced. The method that closes is `closeScreen()`. Escape used the right one. | Cancel, Escape and the inventory key all call `closeScreen()`. Cancel never sends a packet. |
+| Clicks near Cancel/Save hit patterns | The click handler tested the pattern grid before the buttons, and the grid had overflowed over them. | The footer buttons are tested first. Every component has fixed bounds, and one click reaches exactly one component. |
+| Pattern grid overflowing the window | The grid had a fixed 4 × 8 layout. Every pattern of every installed mod was added to it, so extra rows spilled over the item row, the layers and the buttons. | The grid is a fixed 8 × 3 viewport with whole-row scrolling (wheel and draggable scrollbar), clipped with a GL scissor scaled by the window's GUI scale. Clicks are mapped only inside the viewport, to visible cells. |
+| Item icons above other elements | Patterns were drawn as `ItemStack`s through the item renderer, at its own Z levels. | Icons are flat banner faces drawn from the banner pattern atlas (`Atlases.BANNER_ATLAS`, front-face UVs of each pattern sprite, tinted like the world renderer), at the panel's depth. |
+| Possible server error on open with a long claim name | The label was written with `writeString(label, 64)`, which counts bytes. A long or non-ASCII name could throw on the server. | The label is clipped to 64 characters (`DesignRules.clip`, which never splits a surrogate pair) and read with `readString(64)`. Result messages are clipped to 256 the same way. |
 
-### Saving (`CCustomPayloadPacket` on `flanwarfare:designer`)
-- **Packet:** claimId, token, base varint, count (≤16 on the wire), then (hash ≤16 chars,
-  colour varint) per layer. Anything malformed is logged and dropped.
-- **Server thread.** Work is queued there with `enqueueWork`.
-- **Checks, in order:**
-  1. The session exists, its claimId and token match, and it hasn't expired.
-  2. The record and the live Flan claim exist, and the claim still has a flag.
-  3. The flag's dimension and position are unchanged. A moved flag fails, and the player
-     must left-click again.
-  4. `mayEdit` passes, checked again.
-  5. `DesignRules.check` passes: base colour 0..15, matching list sizes, at most 6 layers,
-     every hash a known non-base `BannerPattern`, colours 0..15, and item patterns only if
-     carried now or already on this flag.
-- **Result.** The banner `ItemStack` is built, then
-  `FlagService.setClaimDesign(record, snbt)` sets `ClaimRecord.designSnbt` (persisted in the
-  world data like before, and carried by `/flag move`), marks the data dirty and redraws the
-  flag through the normal path. That is a tile entity data update for the model, or banner
-  blocks otherwise, so nearby clients get vanilla block updates. During a capture animation
-  the design waits until the animation ends.
-- **Reply.** Type 1 (ok, message). The client closes on ok. Otherwise it shows the message and
-  keeps the edit.
+### 25.2 Opening
 
-### Pure logic
-`logic/DesignRules` is covered by `LogicSelfTest.designRules()`, 9 checks.
+- **Index.** `FlagService.flagBlockIndex` maps dimension → block → claim, covering every block
+  of every flag (model column or fence pole, plus banner slots).
+- **Click handling.** `WarEvents.onLeftClickBlock` (server, priority HIGH) cancels the click
+  on any flag block, so nothing is mined or moved, including in creative.
+- **Selection box.** The flags mod's `FlagBlock.getShape` adds a thin plate over the raised
+  banner, so the cloth can be clicked. Collision stays the pedestal and pole.
+- **Authority.** `mayEdit` = the live Flan owner, or an admin when
+  `flags.designer_admin_override` is on (default off).
+- **Session and container.** The server stores
+  `Session{claimId, dimension, flagPos, random token, 15 min}`. It then calls
+  `NetworkHooks.openGui` with the Flags mod's container type `flanwarfareflags:designer`
+  (looked up by registry name, with no compile dependency). The extra data is: claimId, token,
+  label (≤64 chars), {Base, Patterns}, max layers.
+
+### 25.3 Container and the Banner Pattern Item slot (`flags-mod/FlagDesignerContainer`)
+
+- **Slots.** Slot 0 accepts only `BannerPatternItem`s, a stack of 1. Slots 1..36 are the
+  player's inventory, placed off-screen.
+- **Moving items.** The screen moves items only with vanilla `QUICK_MOVE` window clicks: the
+  slot when filled, a chosen inventory slot when empty. The server runs
+  `transferStackInSlot` and syncs as for any container, so nothing can be duplicated and
+  nothing goes out of sync. Hotbar swaps, drops and cursor pick-ups are blocked in the screen,
+  so no item ever sits on the cursor.
+- **Closing.** `onContainerClosed` calls `clearContainer`: the item goes back to the inventory,
+  or drops at the player's feet if it is full. This runs on Cancel, Escape, a successful save,
+  death (`canInteractWith = isAlive`) and logout (`FlagDesigner.onLogout` calls
+  `closeContainer()` before player data is saved).
+- **Item-locked patterns.** These are every pattern applied by any registered
+  `BannerPatternItem` (vanilla's six plus mods'). Client and server compute the set the same
+  way, from the item registry.
+
+### 25.4 Screen (`flags-mod/client/FlagDesignerScreen`, a `ContainerScreen`)
+
+- **Window.** 312 × 234 scaled pixels, centred. Minecraft keeps the scaled screen at least
+  320 × 240 at every GUI scale, so it always fits.
+- **Layout rectangles** (relative to the window):
+  - preview: 7,20 90×172, with reset 85,194;
+  - colours: 102,19 204×46;
+  - pattern grid: 106,80 135×80, with scrollbar 242,80;
+  - item panel: 248,66 58×97 (slot at 269,91, the add box at 269,121);
+  - layers: 102,165 204×42;
+  - Cancel: 6,210 147×20;
+  - Save Flag: 158,210 148×20.
+  - A layout script checked that every rectangle lies inside its panel and that none overlap.
+- **Input.** Footer, then popup or message, then preview, colours, grid, item panel, layers.
+  Nothing is handed to vanilla slot handling. Dragging the preview or scrollbar and scrolling
+  never trigger a button.
+- **3D preview.** Unchanged in approach: the world renderer's static `drawStructure` and
+  `drawFabric`, its own camera, and a scissor matching the GUI scale. Auto-turn is 24°/s,
+  pausing while dragging and for 2.5 s after. Pitch is clamped −30..50° and zoom 0.6..1.8.
+- **Saving.**
+  - The client first checks the item rule itself, for a clear message.
+  - It then sends the save, keeps the window open with "Saving...", and closes only on the
+    server's OK.
+  - On an error it shows the message and keeps the edit.
+  - With no answer in 10 s, it re-enables Save.
+
+### 25.5 Save (`CCustomPayloadPacket` on `flanwarfare:designer`)
+
+- **Packet:** UUID, long token, varint base, varint count (≤16 on the wire), then per layer
+  (string id ≤64, varint dye). Anything malformed is logged and dropped.
+- **Server checks, in order:**
+  1. The session and token match, and the session hasn't expired.
+  2. The claim and flag exist.
+  3. The flag hasn't moved.
+  4. The sender is still the owner.
+  5. The designer container is still open.
+  6. `DesignRules.check` passes: colours 0..15, at most 6 layers, ids registered and not base,
+     and an item-locked id only if the server-side slot holds its item or the flag already
+     had it.
+- **Result.** `FlagService.setClaimDesign` sets `ClaimRecord.designSnbt` (persisted, carried by
+  `/flag move`) and redraws the flag through the normal path, so nearby clients get block or
+  tile entity updates.
+- **Reply.** Type 1 (ok, message ≤256).
+
+### 25.6 Tests
+
+`LogicSelfTest.designRules()` has 19 checks (209 in total). They cover:
+- empty, 6-layer and 7-layer designs;
+- bad colours, unknown, base and over-long ids;
+- a 17+ character modded id being accepted;
+- vanilla and modded item patterns, with and without the item;
+- the `clip` helper.

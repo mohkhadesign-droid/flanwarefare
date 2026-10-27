@@ -96,7 +96,7 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
     private static final int TAB_BASE_X = 226, TAB_PATTERN_X = 258, TAB_Y = 21, TAB_W = 30, TAB_PATTERN_W = 44, TAB_H = 10;
     private static final int GRID_X = 106, GRID_Y = 80, CELL_W = 16, CELL_H = 26, STEP_X = 17, STEP_Y = 27, COLS = 8, ROWS = 3;
     private static final int GRID_W = COLS * STEP_X - 1, GRID_H = ROWS * STEP_Y - 1;
-    private static final int BAR_X = 243, BAR_W = 4;
+    private static final int BAR_X = 242, BAR_W = 3;
     private static final int ITEM_X = 250, ITEM_Y = 69, ITEM_W = 54, ITEM_H = 92;
     private static final int RESULT_X = 269, RESULT_Y = 121;
     private static final int BASE_SLOT_X = 106, LAYER_X = 130, LAYER_STEP = 19, LAYER_Y = 178, LAYER_W = 18, LAYER_H = 25;
@@ -949,7 +949,7 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
     private void drawPatterns(MatrixStack ms, int mx, int my) {
         panel(ms, 102, 66, 145, 97, 0xFF2A2D33);
         text(ms, "2. Select Pattern", 106, 69, 0xFFFFFFFF);
-        String hint = selected >= 0 ? "replaces layer " + (selected + 1) : "adds a layer";
+        String hint = selected >= 0 ? "replaces #" + (selected + 1) : "new layer";
         smallText(ms, hint, 243 - font.getStringWidth(hint) * 0.6F, 71, 0.6F, 0xFF9AA0AA);
 
         // Viewport: fixed size, clipped; only whole rows are ever shown and clickable.
@@ -997,8 +997,8 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
 
     private void drawItemPanel(MatrixStack ms, int mx, int my) {
         panel(ms, 248, 66, 58, 97, 0xFF2A2D33);
-        smallText(ms, "Banner", 252, 70, 0.75F, 0xFFFFFFFF);
-        smallText(ms, "Pattern Item", 252, 77, 0.75F, 0xFFFFFFFF);
+        smallText(ms, "Banner", 251, 70, 0.7F, 0xFFFFFFFF);
+        smallText(ms, "Pattern Item", 251, 77, 0.7F, 0xFFFFFFFF);
         int sx = FlagDesignerContainer.PATTERN_SLOT_X - 1;
         int sy = FlagDesignerContainer.PATTERN_SLOT_Y - 1;
         boolean hover = in(mx, my, sx, sy, 18, 18);
