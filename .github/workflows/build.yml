@@ -22,6 +22,18 @@ jobs:
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
+      - name: Probe mappings
+        if: always()
+        run: |
+          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
+          echo "jar: $J"
+          for c in net.minecraft.tileentity.BannerPattern net.minecraft.client.gui.screen.Screen net.minecraft.client.gui.screen.inventory.ContainerScreen net.minecraft.inventory.container.Container net.minecraft.inventory.container.Slot net.minecraft.inventory.container.ContainerType net.minecraftforge.common.extensions.IForgeContainerType net.minecraftforge.fml.network.NetworkHooks net.minecraft.client.gui.ScreenManager net.minecraft.inventory.container.SimpleNamedContainerProvider net.minecraft.item.BannerPatternItem net.minecraft.client.multiplayer.PlayerController net.minecraft.inventory.Inventory net.minecraft.client.gui.AbstractGui net.minecraft.client.gui.widget.button.Button; do
+            javap -p -cp "$J" $c > p.txt 2>&1 || true
+            echo "::warning title=P $c::$(head -c 3800 p.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')"
+          done
+          javap -p -c -cp "$J" net.minecraft.tileentity.BannerPattern | grep -A6 -E "String (func_|get)[A-Za-z0-9_]*\(\);" | head -40 > q.txt
+          echo "::warning title=PB code::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' q.txt)"
+
       - name: Report compile errors as annotations
         if: failure()
         run: |
