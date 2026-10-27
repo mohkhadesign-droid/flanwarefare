@@ -289,6 +289,10 @@ public final class FlagDesignerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (error != null && in(mx, my, left + 98, top + 18, 196, 137)) {
+            error = null; // first click on the palette/grid only dismisses the notice
+            return true;
+        }
         if (button == 0) {
             for (int i = 0; i < 16; i++) {
                 if (in(mx, my, paletteX(i), paletteY(i), 23, 18)) {
@@ -539,7 +543,6 @@ public final class FlagDesignerScreen extends Screen {
         panel(ms, left + 7, top + 183, 196, 24);
         for (int i = 0; i <= maxLayers && i < 7; i++) {
             int x = slotX(i);
-            boolean filled = i == 0 || i <= design.layers.size();
             frame(ms, x, top + 185, 25, 20, selected == i);
         }
         itemRenderer.renderItemIntoGUI(icon(design.base, java.util.Collections.<Pair<BannerPattern, DyeColor>>emptyList()),
@@ -553,12 +556,8 @@ public final class FlagDesignerScreen extends Screen {
         super.render(ms, mouseX, mouseY, partialTicks);
 
         if (error != null) {
-            String e = error;
-            while (font.getStringWidth(e) > W - 16 && e.length() > 4) {
-                e = e.substring(0, e.length() - 4) + "...";
-            }
-            fill(ms, left + 8, top + H - 37, left + W - 8, top + H - 27, 0xC0300000);
-            font.drawString(ms, e, left + 10, top + H - 36, 0xFFFF6B6B);
+            drawError(ms);
+            return;
         }
 
         // Tooltips
@@ -590,6 +589,44 @@ public final class FlagDesignerScreen extends Screen {
                         new TranslationTextComponent("color.minecraft." + design.base.getTranslationKey())), mouseX, mouseY);
             }
         }
+    }
+
+    /** Word-wraps by pixel width (the font's own wrappers changed names between mappings). */
+    private List<String> wrap(String text, int width) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String next = line.length() == 0 ? word : line + " " + word;
+            if (font.getStringWidth(next) > width && line.length() > 0) {
+                lines.add(line.toString());
+                line = new StringBuilder(word);
+            } else {
+                line = new StringBuilder(next);
+            }
+        }
+        if (line.length() > 0) {
+            lines.add(line.toString());
+        }
+        return lines;
+    }
+
+    /** Save errors and hints: a red notice over the pattern grid; any click there dismisses it. */
+    private void drawError(MatrixStack ms) {
+        List<String> lines = wrap(error, 172);
+        int h = lines.size() * 10 + 20;
+        int x0 = left + 104;
+        int y0 = top + 62 + Math.max(0, (91 - h) / 2);
+        ms.push();
+        ms.translate(0.0D, 0.0D, 400.0D); // above the item icons
+        fill(ms, x0 - 1, y0 - 1, x0 + 189, y0 + h + 1, 0xFFB03A3A);
+        fill(ms, x0, y0, x0 + 188, y0 + h, 0xF0281214);
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i);
+            font.drawString(ms, l, x0 + 94 - font.getStringWidth(l) / 2.0F, y0 + 5 + i * 10, 0xFFFF7070);
+        }
+        String hint = "(click to dismiss)";
+        font.drawString(ms, hint, x0 + 94 - font.getStringWidth(hint) / 2.0F, y0 + h - 12, 0xFF8E949E);
+        ms.pop();
     }
 
     /**

@@ -309,6 +309,33 @@ Accounts: A (raider, party Northwatch), O (claim owner, party Riverkeep), M (inv
 | R5 | Non-operator runs the command | Unknown command / no permission. |
 | R6 | Stand 4 blocks above the base, inside the radius | Not counted (vertical rule unchanged). |
 
+## Flag Designer scenarios (all NOT RUN)
+
+Players: O owns claim C, which has a flag. M is invited to C in Flan. P is in O's party. X is
+an outsider. OP is an operator.
+
+| # | Scenario | Expected |
+|---|---|---|
+| D1 | O left-clicks the pole, the pedestal and the banner cloth (survival and creative) | Designer opens each time; the flag is not damaged, broken or moved; no crack animation remains. |
+| D2 | M, P, X left-click C's flag | "Only the claim owner can edit this flag."; nothing opens. |
+| D3 | OP (not owner) left-clicks with `designer_admin_override = false`, then `true` | Refused, then opens. |
+| D4 | O: red base, yellow dye, click a triangle pattern | Preview turns red, then the yellow triangle appears; a new layer slot appears. |
+| D5 | Hover patterns with different dyes selected | Tooltip e.g. "White Bend", then "Red Bend". |
+| D6 | Add 6 layers, then try a 7th | Red notice: at most 6 layers. |
+| D7 | Select a layer: recolour, replace the pattern, ◀ ▶, X; then Ctrl+Z / Ctrl+Y | Each edit shows immediately; undo and redo restore the states. |
+| D8 | Escape, and Cancel, after edits | Closes; the world flag is unchanged; reopening shows the saved design. |
+| D9 | Save Flag | Closes with "Flag design saved."; the flag changes for O and for a second player standing nearby. |
+| D10 | Restart the server, rejoin, unload and reload the chunk, `/flag move` | Design kept every time. |
+| D11 | O owns two claims; edits one | Only that claim's flag changes. |
+| D12 | Open the designer, then `/flag move` (from a second session or by an admin), then Save | "The flag was moved..." error; the edit stays open. |
+| D13 | Open the designer, have an admin transfer or delete the claim, then Save | Refused with a reason; no change. |
+| D14 | Modified client sends a save for another claim's id, or a wrong token, or 10 layers, or colour 99 | Refused (expired session or invalid design); no change; nothing is logged as saved. |
+| D15 | Carry a creeper banner pattern item, open, use the creeper pattern, drop the item, Save | Save is refused (item pattern not available); with the item it works. |
+| D16 | Preview: wait 15 s; drag; scroll; double-click; press R | One slow turn; drag turns and tilts (clamped); zoom clamped; reset to the default view; spin resumes after about 2.5 s. |
+| D17 | GUI scale 1, 2, 3, 4, Auto; small window | Window fits; the preview stays inside its box (no clipping over the GUI). |
+| D18 | Save during a capture attempt on C | "...will show once the current capture attempt ends."; shown afterwards. |
+| D19 | Server without the flags mod | Owner's left-click gives the `/flag design` hint. |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.
