@@ -66,6 +66,7 @@ public final class WarEvents {
     public void onRegisterCommands(RegisterCommandsEvent event) {
         FlagCommand.register(event.getDispatcher());
         WarCommand.register(event.getDispatcher());
+        WarCommand.registerRoot(event.getDispatcher());
         StatsCommand.register(event.getDispatcher());
         RankCommand.register(event.getDispatcher());
     }

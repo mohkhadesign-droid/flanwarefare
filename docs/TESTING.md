@@ -298,6 +298,17 @@ Accounts: A (raider, party Northwatch), O (claim owner, party Riverkeep), M (inv
 | H11 | Server without the flags mod | Per-perspective boss bars with the same colours and wording. |
 | H12 | Contested for a long time with no % change | Stays CONTESTED (taken from the capture state, not from % changes). |
 
+## Capture radius scenarios (all NOT RUN)
+
+| # | Scenario | Expected |
+|---|---|---|
+| R1 | Fresh install / config still at radius 3.0, start the server | Log: "capture.radius_blocks: 3.0 -> 8.0"; `/flanwarfare capturezone radius` says 8 (16 across). |
+| R2 | Stand 7.5 blocks from the pole centre during a raid, then 8.5 | Capturing at 7.5, not at 8.5; the ring is drawn at 8 blocks and the action bar agrees. |
+| R3 | `/flanwarfare capturezone radius 5` during a running capture | Takes effect within half a second for all flags; percentage kept; ring shrinks. |
+| R4 | Restart | Radius still 5. `/flanwarfare capturezone radius reset` returns to 8. |
+| R5 | Non-operator runs the command | Unknown command / no permission. |
+| R6 | Stand 4 blocks above the base, inside the radius | Not counted (vertical rule unchanged). |
+
 Fill in **Actual** and **Pass/Fail** for each when you run them, and report any failure with
 the server log. Note also that `/war admin status` reports whether FTB Teams was detected.
 Scenarios 17, 18 and 22 depend on it.

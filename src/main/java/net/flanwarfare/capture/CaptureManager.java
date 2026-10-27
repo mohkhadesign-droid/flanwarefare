@@ -343,7 +343,8 @@ public final class CaptureManager {
 
     private Set<ServerPlayerEntity> viewers(ClaimRecord record) {
         Set<ServerPlayerEntity> viewers = new HashSet<>();
-        double range = WarConfig.BOSSBAR_DISTANCE.get();
+        // Everyone inside the zone, plus a margin around it, always sees the HUD.
+        double range = Math.max(WarConfig.BOSSBAR_DISTANCE.get(), WarConfig.CAPTURE_RADIUS.get() + 8.0);
         double rangeSq = range * range;
         for (ServerPlayerEntity player : core.server().getPlayerList().getPlayers()) {
             if (!FlanBridge.dimensionId(player.world).equals(record.dimension)) {

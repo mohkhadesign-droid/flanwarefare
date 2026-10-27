@@ -103,7 +103,8 @@ public final class CaptureAura {
         float[] rgb = WarConfig.rgb(color);
         RedstoneParticleData dust = new RedstoneParticleData(rgb[0], rgb[1], rgb[2],
                 WarConfig.AURA_PARTICLE_SIZE.get().floatValue());
-        int points = WarConfig.AURA_POINTS.get();
+        // About one particle per block of circumference, so larger zones stay a closed ring.
+        int points = Math.max(WarConfig.AURA_POINTS.get(), Math.min(200, (int) Math.ceil(2.0 * Math.PI * radius)));
         double y = record.flagY + 0.15;
         for (int i = 0; i < points; i++) {
             double[] p = CaptureZone.ringPoint(record.flagX, record.flagZ, radius, i, points);

@@ -112,6 +112,7 @@ public final class WarCommand {
                                         .executes(ctx -> setCaptureTime(ctx, WarConfig.DEFAULT_CAPTURE_SECONDS)))
                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(5, 3600))
                                         .executes(ctx -> setCaptureTime(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))))
+                        .then(captureZoneNode())
                         .then(Commands.literal("setwindow")
                                 .then(Commands.argument("window", StringArgumentType.greedyString()).executes(WarCommand::setWindow)))
                         .then(Commands.literal("flag")
@@ -126,6 +127,63 @@ public final class WarCommand {
                                 .then(Commands.literal("cancel").then(claimArg().executes(WarCommand::captureCancel))))
                         .then(Commands.literal("conquest")
                                 .then(Commands.literal("rollback").then(claimArg().executes(WarCommand::rollback))))));
+    }
+
+    /** /... capturezone radius [blocks|reset]: shared by /war admin and /flanwarfare. */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSource> captureZoneNode() {
+        return Commands.literal("capturezone")
+                .executes(WarCommand::showCaptureRadius)
+                .then(Commands.literal("radius")
+                        .executes(WarCommand::showCaptureRadius)
+                        .then(Commands.literal("reset")
+                                .executes(ctx -> setCaptureRadius(ctx, WarConfig.DEFAULT_CAPTURE_RADIUS)))
+                        .then(Commands.argument("blocks", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(1.0, 32.0))
+                                .executes(ctx -> setCaptureRadius(ctx,
+                                        com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "blocks")))));
+    }
+
+    /** Admin-only root command: /flanwarfare capturezone radius [blocks|reset]. */
+    public static void registerRoot(CommandDispatcher<CommandSource> dispatcher) {
+        dispatcher.register(Commands.literal("flanwarfare")
+                .requires(src -> src.hasPermissionLevel(Msg.adminLevel()))
+                .then(captureZoneNode()));
+    }
+
+    private static int showCaptureRadius(CommandContext<CommandSource> ctx) {
+        double r = WarConfig.CAPTURE_RADIUS.get();
+        reply(ctx, "Capture zone radius: " + fmt(r) + " blocks from the centre of the flagpole (" + fmt(2 * r)
+                + " blocks across), for every flag. Height: within " + fmt(WarConfig.VERTICAL_TOLERANCE.get())
+                + " blocks above or below the flag's base. Default " + fmt(WarConfig.DEFAULT_CAPTURE_RADIUS)
+                + ". Change it with /flanwarfare capturezone radius <blocks>.");
+        return 1;
+    }
+
+    private static String fmt(double v) {
+        return v == Math.floor(v) ? Integer.toString((int) v) : Double.toString(v);
+    }
+
+    /**
+     * Sets the global capture radius. It lives only in the server config (the single setting
+     * read live by capture detection, contesting, the ring and the distance readout), so it
+     * applies to every flag at the next evaluation and survives restarts.
+     */
+    private static int setCaptureRadius(CommandContext<CommandSource> ctx, double blocks) {
+        WarCore core = core(ctx);
+        if (core == null) {
+            return 0;
+        }
+        double previous = WarConfig.CAPTURE_RADIUS.get();
+        WarConfig.CAPTURE_RADIUS.set(blocks);
+        WarConfig.CAPTURE_RADIUS.save();
+        audit(core, ctx, "capture radius " + previous + " -> " + blocks);
+        ctx.getSource().sendFeedback(Msg.ok("[Flan Warfare] Capture zone radius changed: " + fmt(previous) + " \u2192 "
+                + fmt(blocks) + " blocks (" + fmt(2 * blocks) + " across) for all flags, effective immediately."
+                + (core.capture().activeCount() > 0 ? " Running captures keep their percentage." : "")), true);
+        if (WarConfig.MIN_FLAG_DISTANCE.get() < 2 * blocks) {
+            ctx.getSource().sendFeedback(Msg.warn("Note: flags.min_flag_distance is " + WarConfig.MIN_FLAG_DISTANCE.get()
+                    + ", so zones of flags closer than " + fmt(2 * blocks) + " blocks overlap."), false);
+        }
+        return 1;
     }
 
     private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSource, String> claimArg() {

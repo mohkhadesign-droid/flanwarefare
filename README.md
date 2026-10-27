@@ -100,7 +100,8 @@ Admin claims (your spawn), excluded claims, disabled dimensions and other protec
 ### Capture zone, capturing and defending
 
 Every capturable flag shows a **ring of particles** on the ground: that is the capture zone,
-3 blocks around the pole's base. Everyone within 48 blocks sees it: owner, defenders, raiders and
+**8 blocks** horizontally from the centre of the pole (16 blocks across) by default. Admins can
+change it for every flag with `/flanwarfare capturezone radius <blocks>`. Everyone within 48 blocks sees it: owner, defenders, raiders and
 bystanders. Stand at ground level by the pole; you don't climb to the banner. Players more than
 3 blocks above or below the base, on a roof or in a tunnel, don't count. The ring is drawn with the same radius the server uses to detect
 players, from one shared setting. Its colour shows the state:
@@ -413,6 +414,9 @@ Attackers can always reach the flag by breaking through whatever surrounds the s
 | `/war admin capturetime` | Show the global capture time. |
 | `/war admin capturetime <seconds>` | Set the capture time for every flag (saved in the config; running captures keep their %). |
 | `/war admin capturetime reset` | Back to 90 seconds. |
+| `/flanwarfare capturezone radius` | Show the capture-zone radius (also `/war admin capturezone radius`). |
+| `/flanwarfare capturezone radius <blocks>` | Set the radius for every flag, 1–32 blocks. It takes effect at once, is saved in the config, and running captures keep their percentage. |
+| `/flanwarfare capturezone radius reset` | Back to 8 blocks. |
 | `/war admin flag restore <claim>` | Rebuild a missing flag at its registered position. |
 | `/war admin flag relocate <claim>` | Put the flag where you stand. This also activates a pending claim. |
 | `/war admin claim inspect [<claim>]` | State, live state, owners, flag block, accounting and the conquest journal. Without an argument it uses the claim you stand in. |
@@ -465,7 +469,7 @@ values are:
 | `flags.inactive_claim_expiration_seconds` | `86400` | Lifetime of claims without a flag |
 | `flags.auto_abandon_expired_claims` | `false` | Delete expired claims through Flan |
 | `flags.movement_cooldown_seconds` | `300` | Outside raids |
-| `capture.radius_blocks` | `3.0` | **The** capture radius: detection, contesting, aura and distance readout |
+| `capture.radius_blocks` | `8.0` | **The** capture radius (blocks from the pole's centre): detection, contesting, aura and distance readout. Also settable with `/flanwarfare capturezone radius` |
 | `capture.vertical_tolerance_blocks` | `3.0` | How far above/below the pole base still counts |
 | `flagpole.style` | `AUTO` | `AUTO`/`MODEL`: use the Flan Warfare Flags model when that mod is installed (and convert existing flags). `BLOCKS`: always fence pole + wall banner |
 | `flagpole.enabled` / `height_blocks` / `pole_block` | `true` / `4` / `minecraft:dark_oak_fence` | New and moved flags only |
@@ -476,7 +480,7 @@ values are:
 | `capture.defenders.trusted_defenders` | `MANAGERS` | `MANAGERS`, `ALL_MEMBERS` or `NONE` |
 | `capture.defenders.trusted_members_cannot_capture` | `true` | Flan members of a claim can't capture it |
 | `member_notifications.enabled` / `notify_on_added` / `notify_on_removed` / `notify_on_permission_change` / `queue_offline_notifications` | `true` | |
-| `flags.min_flag_distance` | `7` | Keeps 3-block capture zones apart |
+| `flags.min_flag_distance` | `7` | Minimum distance between flags. Below twice the radius (16 at radius 8), zones of nearby flags overlap; the startup log warns about it |
 | `capture_aura.enabled` / `particle_interval_ticks` / `visibility_distance_blocks` | `true` / `10` / `48` | Seen by every nearby player |
 | `capture_aura.show_immunity_aura` | `true` | |
 | `capture_aura.show_idle_aura` / `show_active_aura` / `show_contested_aura` / `show_completion_effect` | `true` | |

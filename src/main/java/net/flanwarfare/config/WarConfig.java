@@ -196,7 +196,10 @@ public final class WarConfig {
     public static final ForgeConfigSpec.IntValue CONFIG_VERSION;
 
     /** Version of the defaults below; bumped whenever a default changes. */
-    public static final int CURRENT_CONFIG_VERSION = 2;
+    public static final int CURRENT_CONFIG_VERSION = 3;
+
+    /** Default capture-zone radius (horizontal blocks from the pole's centre). */
+    public static final double DEFAULT_CAPTURE_RADIUS = 8.0;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -316,7 +319,7 @@ public final class WarConfig {
         CAPTURE_RADIUS = b.comment("THE capture radius: horizontal distance from the flag's centre, in blocks.",
                         "Used for capture detection, defender contesting, the particle aura and the action-bar distance.",
                         "Players also need to be between 1 block below and radius+1 blocks above the flag's base.")
-                .defineInRange("radius_blocks", 3.0, 1.0, 16.0);
+                .defineInRange("radius_blocks", DEFAULT_CAPTURE_RADIUS, 1.0, 32.0);
         VERTICAL_TOLERANCE = b.comment("Players must stand within this many blocks above or below the flagpole's base",
                         "(stops capturing from tunnels underneath or roofs above). Used by the aura readout too.")
                 .defineInRange("vertical_tolerance_blocks", 3.0, 1.0, 16.0);
@@ -616,11 +619,16 @@ public final class WarConfig {
         if (version >= CURRENT_CONFIG_VERSION) {
             return changed;
         }
-        migrate(changed, CAPTURE_SECONDS, 180, DEFAULT_CAPTURE_SECONDS, "capture.duration_seconds");
-        migrate(changed, CAPTURE_RADIUS, 2.0, 3.0, "capture.radius_blocks");
-        migrate(changed, MIN_FLAG_DISTANCE, 4, 7, "flags.min_flag_distance");
-        migrate(changed, MAX_CONQUERED_PER_PLAYER, -1, 3, "conquest.max_conquered_claims_per_player");
-        migrate(changed, AURA_DISTANCE, 24, 48, "capture_aura.visibility_distance_blocks");
+        if (version < 2) {
+            migrate(changed, CAPTURE_SECONDS, 180, DEFAULT_CAPTURE_SECONDS, "capture.duration_seconds");
+            migrate(changed, CAPTURE_RADIUS, 2.0, 3.0, "capture.radius_blocks");
+            migrate(changed, MIN_FLAG_DISTANCE, 4, 7, "flags.min_flag_distance");
+            migrate(changed, MAX_CONQUERED_PER_PLAYER, -1, 3, "conquest.max_conquered_claims_per_player");
+            migrate(changed, AURA_DISTANCE, 24, 48, "capture_aura.visibility_distance_blocks");
+        }
+        if (version < 3) {
+            migrate(changed, CAPTURE_RADIUS, 3.0, DEFAULT_CAPTURE_RADIUS, "capture.radius_blocks");
+        }
         CONFIG_VERSION.set(CURRENT_CONFIG_VERSION);
         CONFIG_VERSION.save();
         return changed;
@@ -638,6 +646,12 @@ public final class WarConfig {
     /** Validates cross-field constraints; returns a list of problems (empty when valid). */
     public static List<String> validate() {
         List<String> problems = new ArrayList<>();
+        if (MIN_FLAG_DISTANCE.get() < 2 * CAPTURE_RADIUS.get()) {
+            problems.add("flags.min_flag_distance (" + MIN_FLAG_DISTANCE.get() + ") is less than twice the capture radius ("
+                    + CAPTURE_RADIUS.get() + "): capture zones of nearby flags can overlap, and one player can then "
+                    + "capture or contest two flags at once. Raise min_flag_distance to "
+                    + (int) Math.ceil(2 * CAPTURE_RADIUS.get() + 1) + " if that is not wanted (affects new and moved flags).");
+        }
         if (RAID_MODE.get() == RaidMode.CUSTOM && raidStartTick() == raidEndTick()) {
             problems.add("raid.start_time equals raid.end_time: the CUSTOM window is empty, so raiding never happens");
         }

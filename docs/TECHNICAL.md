@@ -810,3 +810,20 @@ Without the flags mod there are three vanilla boss bars per session, one per per
 » 62%   DEFENDER".
 
 Capture rules, speed, contest and decay are unchanged.
+
+## 24. Capture radius 8 and `/flanwarfare capturezone`
+
+- **Default radius:** `capture.radius_blocks` defaults to **8** (range 1–32). It is still the
+  single radius read live by detection, contesting, the particle ring and the action-bar
+  readout. The vertical rule (`capture.vertical_tolerance_blocks`, default 3) is unchanged.
+- **Migration:** config version 3 moves a radius still at the old default 3.0 to 8.0, once. A
+  radius set to anything else is kept.
+- **Command:** `/flanwarfare capturezone radius [blocks|reset]`, also under `/war admin`,
+  needs the admin permission level. It writes the config value and saves it. Every flag uses
+  the new radius from the next evaluation (half a second at most); running captures keep their
+  percentage. The change is audit-logged.
+- **Ring:** it uses at least one particle per block of circumference (51 at radius 8).
+- **HUD range:** it covers at least the radius plus 8 blocks, so everyone inside a large zone
+  always sees it.
+- **Overlap warning:** `WarConfig.validate` warns when `min_flag_distance` is below twice the
+  radius, because zones of nearby flags then overlap.
