@@ -49,6 +49,7 @@ public final class LogicSelfTest {
         rankRules();
         hudPerspectives();
         designRules();
+        teleportSpots();
         System.out.println("LogicSelfTest: all " + passed + " checks passed");
     }
 
@@ -627,6 +628,28 @@ public final class LogicSelfTest {
         eq(0, HudView.fill(-1, 120), "fill clamped low");
         eq(120, HudView.fill(2, 120), "fill clamped high");
         check(HudView.trendOf(CaptureModel.Status.IDLE) == HudView.Trend.DECREASING, "idle with progress decays");
+    }
+
+    private static void teleportSpots() {
+        java.util.List<int[]> o = TeleportSpots.offsets(1, 0); // banner towards +x
+        eq(24, o.size(), "8 + 16 spots");
+        check(o.get(0)[0] == -1 && o.get(0)[1] == 0, "first: the side away from the banner");
+        check(java.util.Arrays.asList(new String[]{o.get(1)[0] + "," + o.get(1)[1], o.get(2)[0] + "," + o.get(2)[1]})
+                .containsAll(java.util.Arrays.asList("0,-1", "0,1")), "then the two perpendicular sides");
+        int bannerIndex = -1;
+        for (int i = 0; i < 8; i++) {
+            if (o.get(i)[0] == 1 && o.get(i)[1] == 0) {
+                bannerIndex = i;
+            }
+        }
+        eq(7, bannerIndex, "banner side last in ring 1");
+        for (int i = 0; i < 8; i++) {
+            check(Math.max(Math.abs(o.get(i)[0]), Math.abs(o.get(i)[1])) == 1, "ring 1 first: " + i);
+        }
+        check(o.get(8)[0] == -2 && o.get(8)[1] == 0, "ring 2 starts away from the banner");
+        eq(0, TeleportSpots.LEVELS[0], "base level first");
+        java.util.List<int[]> z = TeleportSpots.offsets(0, -1); // banner towards north
+        check(z.get(0)[0] == 0 && z.get(0)[1] == 1, "banner north: start south");
     }
 
     private static void designRules() {

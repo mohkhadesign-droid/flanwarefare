@@ -869,14 +869,44 @@ public final class FlagDesignerScreen extends ContainerScreen<FlagDesignerContai
 
     private void drawPreview(MatrixStack ms, int mx, int my) {
         panel(ms, PREVIEW_X - 1, PREVIEW_Y - 1, PREVIEW_W + 2, 188, 0xFF2A2D33);
-        fillGradient(ms, guiLeft + PREVIEW_X, guiTop + PREVIEW_Y, guiLeft + PREVIEW_X + PREVIEW_W, guiTop + PREVIEW_Y + PREVIEW_H,
-                0xFF34496B, 0xFF16181D);
+        drawBackdrop(ms);
         renderModel(ms);
         rect(ms, PREVIEW_X, 193, PREVIEW_W, 12, 0xFF121317);
         smallText(ms, "Drag / Scroll", PREVIEW_X + 4, 196.5F, 0.75F, 0xFFB8BEC8);
         boolean hover = in(mx, my, RESET_X, RESET_Y, RESET_W, RESET_H);
         rect(ms, RESET_X, RESET_Y, RESET_W, RESET_H, hover ? 0xFF5A5E68 : 0xFF33363D);
         font.drawStringWithShadow(ms, "↺", guiLeft + RESET_X + 2.5F, guiTop + RESET_Y + 1.0F, 0xFFFFFFFF);
+    }
+
+    private static final net.minecraft.util.ResourceLocation BACKDROP = new net.minecraft.util.ResourceLocation(
+            net.flanwarfare.designer.DesignerMod.MOD_ID, "textures/gui/preview_backdrop.png");
+    private static final int BACKDROP_W = 512;
+    private static final int BACKDROP_H = 256;
+
+    /**
+     * The scenery behind the 3D flag: a seamless 512 x 256 daylight landscape (grass, oak trees,
+     * hills, sky). The soft-focus blur is baked into the image and the texture uses linear
+     * filtering (its .mcmeta), so it stays soft at every GUI scale while the flag, drawn after
+     * it with its own sharp textures, stays crisp. It pans a little with the flag's rotation
+     * (a quarter of the turn), wrapping seamlessly (the texture repeats). It is drawn only
+     * inside the preview box, so the interface around it is unaffected.
+     */
+    private void drawBackdrop(MatrixStack ms) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.getTextureManager().bindTexture(BACKDROP);
+        RenderSystem.color4f(1.0F, 1.0F, 1.0F, 1.0F);
+        float spanU = BACKDROP_H * (float) PREVIEW_W / PREVIEW_H; // texture px across the box, height fitted
+        float u = ((-yaw * 0.25F) / 360.0F * BACKDROP_W) % BACKDROP_W;
+        if (u < 0) {
+            u += BACKDROP_W;
+        }
+        blit(ms, guiLeft + PREVIEW_X, guiTop + PREVIEW_Y, PREVIEW_W, PREVIEW_H, u, 0.0F, Math.round(spanU), BACKDROP_H,
+                BACKDROP_W, BACKDROP_H);
+        // Gentle vignette so the scene sits calmly inside the dark frame.
+        fillGradient(ms, guiLeft + PREVIEW_X, guiTop + PREVIEW_Y, guiLeft + PREVIEW_X + PREVIEW_W, guiTop + PREVIEW_Y + 18,
+                0x40000000, 0x00000000);
+        fillGradient(ms, guiLeft + PREVIEW_X, guiTop + PREVIEW_Y + PREVIEW_H - 22, guiLeft + PREVIEW_X + PREVIEW_W,
+                guiTop + PREVIEW_Y + PREVIEW_H, 0x00000000, 0x50000000);
     }
 
     /**
