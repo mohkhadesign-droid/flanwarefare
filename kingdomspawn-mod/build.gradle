@@ -1,0 +1,55 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+
+version = System.getenv('GITHUB_RUN_NUMBER') ? "${mod_version}-b${System.getenv('GITHUB_RUN_NUMBER')}" : mod_version
+group = 'net.grandexpedition.kingdomspawn'
+archivesBaseName = 'kingdomspawn'
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(8)
+
+minecraft {
+    mappings channel: 'snapshot', version: '20210309-1.16.5'
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+jar {
+    manifest {
+        attributes([
+            'Specification-Title'     : 'kingdomspawn',
+            'Specification-Vendor'    : 'grandexpedition',
+            'Specification-Version'   : '1',
+            'Implementation-Title'    : project.name,
+            'Implementation-Version'  : project.version,
+            'Implementation-Vendor'   : 'grandexpedition',
+            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+jar.finalizedBy('reobfJar')
+
+// Dependency-free tests of the Minecraft-independent logic (search order, kingdom placement,
+// player slots). Runs as part of `./gradlew build`.
+task logicTest(type: JavaExec) {
+    group = 'verification'
+    description = 'Runs LogicSelfTest'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass.set('net.grandexpedition.kingdomspawn.logic.LogicSelfTest')
+}
+check.dependsOn logicTest

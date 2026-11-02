@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="kingdomspawn"
+version="${file.jarVersion}"
+displayName="Grand Expedition Kingdom Spawn"
+authors="Grand Expedition"
+description='''
+Server-side kingdom deployment for Grand Expedition: preassign players to three kingdoms, find
+their roulette biomes far out in the world, spawn each kingdom's members together on first join,
+and visit the central hub with /spawn and /return. No client install needed.
+'''
+
+[[dependencies.kingdomspawn]]
+    modId="forge"
+    mandatory=true
+    versionRange="[36,)"
+    ordering="NONE"
+    side="SERVER"
+
+[[dependencies.kingdomspawn]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.16.5]"
+    ordering="NONE"
+    side="SERVER"

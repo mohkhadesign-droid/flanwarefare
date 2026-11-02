@@ -1,0 +1,72 @@
+{
+  "admin_permission_level": 2,
+  "kingdoms": {
+    "kingdom_1": {
+      "name": "Kingdom I",
+      "biome": "minecraft:dark_forest",
+      "players": [
+        { "uuid": "c406db56-5c6a-4b4c-b048-d28d138aab39", "name": "BlazeSmith23" },
+        "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+      ]
+    },
+    "kingdom_2": {
+      "name": "Kingdom II",
+      "biome": "minecraft:badlands",
+      "players": []
+    },
+    "kingdom_3": {
+      "name": "Kingdom III",
+      "biome": "biomesoplenty:snowy_coniferous_forest",
+      "players": []
+    }
+  },
+  "search": {
+    "min_x": -50000,
+    "max_x": 50000,
+    "min_z": -50000,
+    "max_z": 50000,
+    "safety_margin": 500,
+    "min_separation": 15000.0,
+    "sample_spacing": 256,
+    "band_width": 2000,
+    "core_radius": 48,
+    "core_min_matches": 6,
+    "stop_after_candidates": 24,
+    "budget_ms_per_tick": 8,
+    "chunk_loads_per_tick": 1,
+    "max_terrain_attempts": 40,
+    "max_slope": 3,
+    "min_safe_slots": 5,
+    "progress_seconds": 5
+  },
+  "hub": {
+    "radius": 64.0,
+    "dimension": "minecraft:overworld",
+    "x": 0.5,
+    "y": 80.0,
+    "z": 0.5,
+    "yaw": 0.0,
+    "pitch": 0.0
+  },
+  "holding": {
+    "enabled": true,
+    "location": null
+  },
+  "deployment": {
+    "radius_min": 5,
+    "radius_max": 10,
+    "deploy_existing_players": false,
+    "hold_on_every_login": true
+  },
+  "teleport": {
+    "register_spawn_commands": true,
+    "spawn_command": "spawn",
+    "return_command": "return",
+    "delay_seconds": 5,
+    "cooldown_seconds": 30,
+    "combat_seconds": 15,
+    "return_expiry_minutes": 0,
+    "return_only_from_hub": true,
+    "admins_bypass": true
+  }
+}
