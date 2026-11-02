@@ -23,6 +23,25 @@ jobs:
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
           ./gradlew -p designer-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
+      - name: Probe KS
+        if: always()
+        run: |
+          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
+          probe() { javap -p -cp "$J" "$1" 2>&1 | grep "(" | grep -v lambda | grep -E "$2" | sed 's/^ *//' | cut -c1-190 > q.txt; split -l 22 q.txt part_; for f in part_*; do echo "::warning title=$1::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done; rm -f part_* ; }
+          probe net.minecraft.world.server.ServerWorld "Registr|getChunkProvider|getSeed|getBiome|getHeight"
+          probe net.minecraft.util.registry.DynamicRegistries "Registry|func_"
+          probe net.minecraft.util.registry.Registry "getKey\(|keySet|containsKey|getOrDefault\(|getOptional|func_243576|getValue"
+          probe net.minecraft.world.biome.provider.BiomeProvider "Biome "
+          probe net.minecraft.world.gen.ChunkGenerator "BiomeProvider|getSeaLevel|func_222"
+          probe net.minecraft.world.server.ServerChunkProvider "getChunkGenerator|isChunkLoaded|chunkExists"
+          probe net.minecraft.world.World "getBiome|getHeight\(|getWorldBorder|getChunk\(|isBlockLoaded"
+          probe net.minecraft.stats.ServerStatisticsManager "getValue"
+          probe net.minecraft.server.management.PlayerProfileCache "GameProfile"
+          probe net.minecraft.server.MinecraftServer "getWorld\(|getPlayerProfileCache|getPlayerList|func_240770_D_|getWorlds|getDataDirectory|func_240776_a_"
+          probe net.minecraft.command.ISuggestionProvider "suggest"
+          probe net.minecraft.world.border.WorldBorder "contains"
+          probe net.minecraft.util.RegistryKey "static|getLocation"
+
       - name: Report compile errors as annotations
         if: failure()
         run: |
