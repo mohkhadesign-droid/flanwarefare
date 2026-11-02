@@ -26,7 +26,7 @@ jobs:
       - name: Probe KS
         if: always()
         run: |
-          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" | head -1)
+          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" ! -name "*launcher*" | head -1)
           echo "::warning title=JAR::[$J]"
           : > all.txt
           for c in net.minecraft.world.server.ServerWorld net.minecraft.util.registry.DynamicRegistries net.minecraft.util.registry.Registry net.minecraft.world.biome.provider.BiomeProvider net.minecraft.world.gen.ChunkGenerator net.minecraft.world.server.ServerChunkProvider net.minecraft.world.World net.minecraft.stats.ServerStatisticsManager net.minecraft.server.management.PlayerProfileCache net.minecraft.server.MinecraftServer net.minecraft.command.ISuggestionProvider net.minecraft.world.border.WorldBorder net.minecraft.util.RegistryKey net.minecraft.world.biome.BiomeManager; do
