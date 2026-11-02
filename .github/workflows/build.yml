@@ -22,20 +22,7 @@ jobs:
           ./gradlew build --no-daemon --stacktrace 2>&1 | tee build.log
           ./gradlew -p flags-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
           ./gradlew -p designer-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
-
-      - name: Probe KS
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches -name "forge-1.16.5-36.2.39*mapped*.jar" ! -name "*sources*" ! -name "*launcher*" | head -1)
-          echo "::warning title=JAR::[$J]"
-          : > all.txt
-          for c in net.minecraft.world.server.ServerWorld net.minecraft.util.registry.DynamicRegistries net.minecraft.util.registry.Registry net.minecraft.world.biome.provider.BiomeProvider net.minecraft.world.gen.ChunkGenerator net.minecraft.world.server.ServerChunkProvider net.minecraft.world.World net.minecraft.stats.ServerStatisticsManager net.minecraft.server.management.PlayerProfileCache net.minecraft.server.MinecraftServer net.minecraft.command.ISuggestionProvider net.minecraft.world.border.WorldBorder net.minecraft.util.RegistryKey net.minecraft.world.biome.BiomeManager; do
-            echo "### $c" >> all.txt
-            javap -p -cp "$J" $c 2>&1 | grep "(" | grep -v 'lambda\$' | grep -iE "registr|biome|height|chunk|world\(|getKey|keySet|containsKey|getOrDefault|getOptional|getValue|profile|suggest|contains|getLocation|static|func_24|teleport|border|seed|getDataDirectory|getPlayerList" | sed 's/^ *//' | cut -c1-180 >> all.txt || true
-          done
-          wc -l all.txt
-          split -l 24 all.txt part_
-          for f in part_*; do echo "::warning title=P::$(sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' $f)"; done
+          ./gradlew -p kingdomspawn-mod build --no-daemon --stacktrace 2>&1 | tee -a build.log
 
       - name: Report compile errors as annotations
         if: failure()
@@ -56,4 +43,5 @@ jobs:
             build/libs/*.jar
             flags-mod/build/libs/*.jar
             designer-mod/build/libs/*.jar
+            kingdomspawn-mod/build/libs/*.jar
           if-no-files-found: error
