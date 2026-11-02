@@ -78,7 +78,7 @@ public final class KsConfig {
         public int progress_seconds = 5;
     }
 
-    public static final class Place {
+    public static class Place {
         public String dimension = "minecraft:overworld";
         /** Null = the world spawn of that dimension. */
         public Double x;
